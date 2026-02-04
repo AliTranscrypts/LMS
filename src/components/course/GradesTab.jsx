@@ -3,9 +3,11 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../services/supabase'
 import { getSubmittedStudents, getAssignmentGrades } from '../../services/assignments'
 import { fetchStudentGradeData, getCourseGradebook, getCourseGradeStats } from '../../services/grades'
+import { getQuizAttemptsForGrading } from '../../services/quizzes'
 import { useGradePolling } from '../../hooks/usePolling'
 import Modal from '../common/Modal'
 import TeacherGradingView from '../assignment/TeacherGradingView'
+import { QuizGradingView } from '../quiz'
 
 export default function GradesTab({ course, isTeacher, studentId }) {
   const [loading, setLoading] = useState(true)
@@ -100,14 +102,26 @@ export default function GradesTab({ course, isTeacher, studentId }) {
     } else {
       setAssignments(data || [])
       
-      // Fetch submission and grading stats for each assignment
+      // Fetch submission and grading stats for each assignment/quiz
       const stats = {}
       for (const assignment of (data || [])) {
-        const { data: submitted } = await getSubmittedStudents(assignment.id)
-        const { data: graded } = await getAssignmentGrades(assignment.id)
-        stats[assignment.id] = {
-          submittedCount: submitted?.length || 0,
-          gradedCount: graded?.length || 0
+        if (assignment.type === 'quiz') {
+          // For quizzes, get attempts
+          const { data: attempts } = await getQuizAttemptsForGrading(assignment.id)
+          const totalAttempts = attempts?.length || 0
+          const gradedAttempts = attempts?.filter(a => a.is_graded)?.length || 0
+          stats[assignment.id] = {
+            submittedCount: totalAttempts,
+            gradedCount: gradedAttempts
+          }
+        } else {
+          // For assignments, get submissions
+          const { data: submitted } = await getSubmittedStudents(assignment.id)
+          const { data: graded } = await getAssignmentGrades(assignment.id)
+          stats[assignment.id] = {
+            submittedCount: submitted?.length || 0,
+            gradedCount: graded?.length || 0
+          }
         }
       }
       setAssignmentStats(stats)
@@ -216,14 +230,20 @@ export default function GradesTab({ course, isTeacher, studentId }) {
         />
       )}
       
-      {/* Assignment Grading Modal */}
+      {/* Assignment/Quiz Grading Modal */}
       <Modal
         isOpen={showGradingView}
         onClose={handleCloseGradingView}
-        title="Grade Assignment"
+        title={selectedAssignment?.type === 'quiz' ? 'Grade Quiz' : 'Grade Assignment'}
         maxWidth="max-w-6xl"
       >
-        {selectedAssignment && (
+        {selectedAssignment && selectedAssignment.type === 'quiz' ? (
+          <QuizGradingView
+            assignment={selectedAssignment}
+            courseId={course.id}
+            onClose={handleCloseGradingView}
+          />
+        ) : selectedAssignment && (
           <TeacherGradingView
             assignment={selectedAssignment}
             courseId={course.id}

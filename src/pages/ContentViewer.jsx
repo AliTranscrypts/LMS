@@ -7,6 +7,7 @@ import Layout from '../components/common/Layout'
 import PdfViewer from '../components/content/PdfViewer'
 import VideoPlayer from '../components/content/VideoPlayer'
 import AssignmentViewer from '../components/assignment/AssignmentViewer'
+import { QuizViewer, QuizBuilder } from '../components/quiz'
 
 export default function ContentViewer() {
   const { contentId } = useParams()
@@ -334,12 +335,19 @@ export default function ContentViewer() {
             </div>
           )}
 
-          {content?.type === 'quiz' && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
-              <p className="text-orange-700">
-                Quiz functionality coming soon.
-              </p>
-            </div>
+          {content?.type === 'quiz' && isStudent && (
+            <QuizViewer
+              content={content}
+              progress={progress}
+              onProgressUpdate={(newProgress) => setProgress(newProgress)}
+            />
+          )}
+
+          {content?.type === 'quiz' && isTeacher && (
+            <TeacherQuizView 
+              content={content}
+              onQuizSaved={fetchContent}
+            />
           )}
         </div>
 
@@ -442,5 +450,112 @@ export default function ContentViewer() {
         </div>
       </div>
     </Layout>
+  )
+}
+
+/**
+ * TeacherQuizView - Teacher's view of a quiz with edit capabilities
+ */
+function TeacherQuizView({ content, onQuizSaved }) {
+  const [showBuilder, setShowBuilder] = useState(false)
+  const [quizConfig, setQuizConfig] = useState(content?.quiz_config)
+
+  const hasQuestions = quizConfig?.questions?.length > 0
+  const totalPoints = quizConfig?.questions?.reduce((sum, q) => sum + (q.points || 1), 0) || 0
+  const questionCounts = quizConfig?.questions?.reduce((acc, q) => {
+    acc[q.type] = (acc[q.type] || 0) + 1
+    return acc
+  }, {}) || {}
+
+  if (showBuilder) {
+    return (
+      <QuizBuilder
+        content={content}
+        onSave={() => {
+          setShowBuilder(false)
+          onQuizSaved && onQuizSaved()
+        }}
+        onCancel={() => setShowBuilder(false)}
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Quiz Overview Card */}
+      <div className="card p-6 bg-purple-50 border border-purple-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">📝</span>
+            <div>
+              <h3 className="font-semibold text-purple-900">Quiz Details</h3>
+              <p className="text-purple-700 text-sm">
+                {hasQuestions 
+                  ? `${quizConfig.questions.length} questions • ${totalPoints} total points`
+                  : 'No questions configured yet'
+                }
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowBuilder(true)}
+            className="btn btn-primary"
+          >
+            {hasQuestions ? 'Edit Quiz' : 'Build Quiz'}
+          </button>
+        </div>
+
+        {hasQuestions && (
+          <>
+            {/* Question Type Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              {Object.entries(questionCounts).map(([type, count]) => (
+                <div key={type} className="bg-white rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-purple-700">{count}</div>
+                  <div className="text-xs text-purple-600">
+                    {type.replace('_', ' ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Time Limit */}
+            {quizConfig.time_limit && (
+              <div className="flex items-center gap-2 text-sm text-purple-700">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Time limit: {quizConfig.time_limit} minutes
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Evaluation Type */}
+        {content.evaluation_type && (
+          <div className="mt-4 pt-4 border-t border-purple-200">
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+              content.evaluation_type === 'of' 
+                ? 'bg-success-100 text-success-700' 
+                : content.evaluation_type === 'for'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-yellow-100 text-yellow-700'
+            }`}>
+              {content.evaluation_type === 'of' && '✓ Counts toward grade (OF Learning)'}
+              {content.evaluation_type === 'for' && 'Practice (FOR Learning)'}
+              {content.evaluation_type === 'as' && 'Self-assessment (AS Learning)'}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Grading Note */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-700">
+          <strong>Note:</strong> To grade quiz attempts, go to the <strong>Grades</strong> tab in the course view.
+          Multiple choice and true/false questions are auto-graded. Short answer and essay questions require manual grading.
+        </p>
+      </div>
+    </div>
   )
 }
