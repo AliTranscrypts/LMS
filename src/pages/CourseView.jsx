@@ -39,8 +39,8 @@ export default function CourseView() {
     } else {
       setCourse(data)
       // Fetch enrollment count for archive warning
-      const { data: countData } = await getEnrollmentCount(courseId)
-      setEnrollmentCount(countData?.count || 0)
+      const { count } = await getEnrollmentCount(courseId)
+      setEnrollmentCount(count || 0)
     }
     setLoading(false)
   }
