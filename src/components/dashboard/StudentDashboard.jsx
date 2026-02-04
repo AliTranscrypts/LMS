@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { getStudentEnrollments } from '../../services/enrollments'
-import { getStudentCourseProgress } from '../../services/progress'
+import { getStudentCourseProgress, getNextIncompleteContent } from '../../services/progress'
 import Layout from '../common/Layout'
 import StudentIdCard from './StudentIdCard'
 import EmptyState from '../common/EmptyState'
@@ -84,24 +84,59 @@ export default function StudentDashboard() {
 }
 
 function CourseCard({ enrollment, userId }) {
+  const navigate = useNavigate()
   const { course, calculated_grade } = enrollment
   const gradeProgress = calculated_grade?.final_grade
   const [contentProgress, setContentProgress] = useState(null)
+  const [nextUp, setNextUp] = useState(null)
 
   useEffect(() => {
-    const fetchProgress = async () => {
-      const { data } = await getStudentCourseProgress(userId, course.id)
-      setContentProgress(data)
+    const fetchData = async () => {
+      // Fetch progress and next up in parallel
+      const [progressResult, nextUpResult] = await Promise.all([
+        getStudentCourseProgress(userId, course.id),
+        getNextIncompleteContent(userId, course.id)
+      ])
+      
+      if (progressResult.data) {
+        setContentProgress(progressResult.data)
+      }
+      if (nextUpResult.data) {
+        setNextUp(nextUpResult.data)
+      }
     }
     if (userId) {
-      fetchProgress()
+      fetchData()
     }
   }, [userId, course.id])
+
+  const getContentIcon = (type) => {
+    switch (type) {
+      case 'reading': return '📄'
+      case 'video': return '🎥'
+      case 'assignment': return '📝'
+      case 'quiz': return '❓'
+      default: return '📎'
+    }
+  }
+
+  const handleContinueLearning = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (nextUp?.content?.id) {
+      // Navigate directly to the next incomplete content
+      navigate(`/content/${nextUp.content.id}`)
+    } else {
+      // If all complete or no next up, go to course page
+      navigate(`/courses/${course.id}`)
+    }
+  }
 
   return (
     <Link
       to={`/courses/${course.id}`}
-      className="card p-5 hover:shadow-md transition-shadow"
+      className="card p-5 hover:shadow-md transition-shadow flex flex-col"
     >
       <h3 className="font-semibold text-lg text-gray-900 mb-2">
         {course.name}
@@ -123,7 +158,7 @@ function CourseCard({ enrollment, userId }) {
       {contentProgress && contentProgress.totalContent > 0 && (
         <div className="mb-3">
           <div className="flex justify-between text-sm mb-1">
-            <span className="text-gray-600">Content Progress</span>
+            <span className="text-gray-600">Progress</span>
             <span className="font-medium text-gray-900">
               {contentProgress.completedContent} of {contentProgress.totalContent} ({contentProgress.percentComplete}%)
             </span>
@@ -137,7 +172,7 @@ function CourseCard({ enrollment, userId }) {
           {/* Module completion summary */}
           {contentProgress.modules && (
             <div className="mt-2 flex flex-wrap gap-1">
-              {contentProgress.modules.map((module, idx) => (
+              {contentProgress.modules.map((module) => (
                 <span 
                   key={module.id}
                   className={`text-xs px-2 py-0.5 rounded ${
@@ -158,7 +193,7 @@ function CourseCard({ enrollment, userId }) {
       )}
 
       {/* Grade Progress indicator */}
-      <div className="mt-2">
+      <div className="mb-3">
         {gradeProgress !== undefined && gradeProgress !== null ? (
           <div>
             <div className="flex justify-between text-sm mb-1">
@@ -179,11 +214,41 @@ function CourseCard({ enrollment, userId }) {
         )}
       </div>
 
-      <div className="mt-4 flex items-center text-primary-600 text-sm font-medium">
-        Continue Learning
-        <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+      {/* Next Up indicator */}
+      {nextUp && !nextUp.allComplete && nextUp.content && (
+        <div className="mb-3 p-2 bg-primary-50 rounded-lg border border-primary-100">
+          <p className="text-xs text-primary-600 font-medium mb-1">Next Up</p>
+          <p className="text-sm text-gray-900 flex items-center gap-1">
+            <span>{getContentIcon(nextUp.content.type)}</span>
+            <span className="truncate">{nextUp.content.name}</span>
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">{nextUp.module?.name}</p>
+        </div>
+      )}
+
+      {/* All Complete indicator */}
+      {nextUp?.allComplete && (
+        <div className="mb-3 p-2 bg-success-50 rounded-lg border border-success-100">
+          <p className="text-sm text-success-700 font-medium flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Course Complete!
+          </p>
+        </div>
+      )}
+
+      {/* Continue Learning Button - grows to fill space */}
+      <div className="mt-auto pt-2">
+        <button
+          onClick={handleContinueLearning}
+          className="w-full py-2 px-4 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+        >
+          {nextUp?.allComplete ? 'Review Course' : 'Continue Learning'}
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
     </Link>
   )

@@ -5,6 +5,7 @@ import { getCourse } from '../services/courses'
 import { getClassRoster, getEnrollmentCount } from '../services/enrollments'
 import Layout from '../components/common/Layout'
 import Tabs from '../components/common/Tabs'
+import CourseHome from '../components/course/CourseHome'
 import SyllabusTab from '../components/course/SyllabusTab'
 import ModulesTab from '../components/course/ModulesTab'
 import GradesTab from '../components/course/GradesTab'
@@ -18,12 +19,20 @@ export default function CourseView() {
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('modules') // Default to modules as per spec
+  // Default tab: 'home' for students (Course Home with Next Up), 'modules' for teachers
+  const [activeTab, setActiveTab] = useState(null) // Will be set after auth check
   const [enrollmentCount, setEnrollmentCount] = useState(0)
 
   // Course settings modals
   const [showEditModal, setShowEditModal] = useState(false)
   const [showArchiveModal, setShowArchiveModal] = useState(false)
+
+  // Set default tab based on user role once auth is loaded
+  useEffect(() => {
+    if (activeTab === null && profile?.role) {
+      setActiveTab(profile.role === 'student' ? 'home' : 'modules')
+    }
+  }, [profile?.role, activeTab])
 
   useEffect(() => {
     fetchCourse()
@@ -57,15 +66,20 @@ export default function CourseView() {
     { id: 'students', label: 'Students' },
   ]
 
-  // Student tabs (no Students tab for managing, but they can see roster)
+  // Student tabs - Home tab shows Course Home view with Next Up and progress
   const studentTabs = [
-    { id: 'syllabus', label: 'Syllabus' },
+    { id: 'home', label: 'Home' },
     { id: 'modules', label: 'Modules' },
     { id: 'grades', label: 'Grades' },
     { id: 'roster', label: 'Class Roster' },
   ]
 
   const tabs = isTeacher ? teacherTabs : studentTabs
+
+  // Handler for navigating to modules from Course Home
+  const handleNavigateToModules = () => {
+    setActiveTab('modules')
+  }
 
   if (loading) {
     return (
@@ -96,6 +110,15 @@ export default function CourseView() {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'home':
+        // Student Course Home view with Next Up and progress summary
+        return (
+          <CourseHome 
+            course={course} 
+            userId={user?.id} 
+            onNavigateToModules={handleNavigateToModules}
+          />
+        )
       case 'syllabus':
         return <SyllabusTab course={course} isTeacher={isTeacher} onUpdate={fetchCourse} />
       case 'modules':
