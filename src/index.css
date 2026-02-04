@@ -43,6 +43,31 @@
 }
 
 @layer components {
+  /* Loading skeleton animation */
+  .skeleton-loading {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+
+  /* Fade in animation for content */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Slide up animation for notifications */
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
   .btn {
     @apply px-4 py-2 rounded-md font-semibold text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
@@ -81,5 +106,24 @@
   
   .page-container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+  }
+
+  /* Offline indicator positioning */
+  .offline-indicator {
+    @apply fixed bottom-4 left-4 z-50;
+  }
+
+  /* Loading state overlay */
+  .loading-overlay {
+    @apply absolute inset-0 bg-white/75 flex items-center justify-center z-10;
+  }
+
+  /* Smooth image loading */
+  .img-loading {
+    @apply bg-gray-100 transition-opacity duration-300;
+  }
+
+  .img-loaded {
+    @apply opacity-100;
   }
 }

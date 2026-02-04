@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import * as offlineDb from './offlineDb'
 
 // ============================================
 // SUBMISSIONS
@@ -92,36 +93,79 @@ export async function getSubmittedStudents(assignmentId) {
 }
 
 /**
- * Create a new submission
+ * Create a new submission (with offline queuing support)
+ * If offline, the submission is queued for later sync
  */
 export async function createSubmission(assignmentId, studentId, submissionData, dueDate) {
-  // Get current version count
-  const { data: existing } = await supabase
-    .from('submissions')
-    .select('version')
-    .eq('assignment_id', assignmentId)
-    .eq('student_id', studentId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single()
+  const isOnline = navigator.onLine
 
-  const newVersion = (existing?.version || 0) + 1
-  const now = new Date()
-  const isLate = dueDate ? now > new Date(dueDate) : false
+  // If offline, queue the submission
+  if (!isOnline) {
+    try {
+      const id = await offlineDb.addPendingSubmission({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        submission_data: submissionData,
+        due_date: dueDate
+      })
+      return { 
+        data: { id, queued: true }, 
+        error: null,
+        queued: true 
+      }
+    } catch (error) {
+      return { data: null, error, queued: false }
+    }
+  }
 
-  const { data, error } = await supabase
-    .from('submissions')
-    .insert({
-      assignment_id: assignmentId,
-      student_id: studentId,
-      submission_data: submissionData,
-      is_late: isLate,
-      version: newVersion
-    })
-    .select()
-    .single()
+  // Online - submit directly
+  try {
+    // Get current version count
+    const { data: existing } = await supabase
+      .from('submissions')
+      .select('version')
+      .eq('assignment_id', assignmentId)
+      .eq('student_id', studentId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .single()
 
-  return { data, error }
+    const newVersion = (existing?.version || 0) + 1
+    const now = new Date()
+    const isLate = dueDate ? now > new Date(dueDate) : false
+
+    const { data, error } = await supabase
+      .from('submissions')
+      .insert({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        submission_data: submissionData,
+        is_late: isLate,
+        version: newVersion
+      })
+      .select()
+      .single()
+
+    return { data, error, queued: false }
+  } catch (networkError) {
+    // Network error during submission - queue it
+    console.warn('Network error, queueing submission:', networkError)
+    try {
+      const id = await offlineDb.addPendingSubmission({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        submission_data: submissionData,
+        due_date: dueDate
+      })
+      return { 
+        data: { id, queued: true }, 
+        error: null,
+        queued: true 
+      }
+    } catch (queueError) {
+      return { data: null, error: queueError, queued: false }
+    }
+  }
 }
 
 // ============================================

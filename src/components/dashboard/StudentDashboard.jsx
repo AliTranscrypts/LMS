@@ -1,36 +1,55 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useOffline } from '../../contexts/OfflineContext'
 import { getStudentEnrollments } from '../../services/enrollments'
 import { getStudentCourseProgress, getNextIncompleteContent } from '../../services/progress'
+import { useSearch } from '../../hooks'
 import Layout from '../common/Layout'
 import StudentIdCard from './StudentIdCard'
 import EmptyState from '../common/EmptyState'
+import { CardSkeleton } from '../common/LoadingSpinner'
 
 export default function StudentDashboard() {
   const { profile, user } = useAuth()
+  const { isOnline, pendingCount } = useOffline()
   const [enrollments, setEnrollments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isFromCache, setIsFromCache] = useState(false)
+
+  // Search functionality with debouncing
+  const { 
+    searchTerm, 
+    setSearchTerm, 
+    filteredItems: filteredEnrollments,
+    isSearching 
+  } = useSearch(enrollments, { 
+    searchFields: ['course.name', 'course.description', 'course.teacher.full_name'],
+    debounceMs: 300
+  })
 
   useEffect(() => {
     fetchEnrollments()
   }, [user?.id])
 
-  const fetchEnrollments = async () => {
+  const fetchEnrollments = useCallback(async () => {
     if (!user?.id) return
     
     setLoading(true)
-    const { data, error } = await getStudentEnrollments(user.id)
+    setError(null)
     
-    if (error) {
-      setError('Failed to load your courses')
-      console.error(error)
-    } else {
-      setEnrollments(data || [])
+    const result = await getStudentEnrollments(user.id)
+    
+    if (result.error) {
+      setError(result.isFromCache ? 'Showing cached data - some courses may be outdated' : 'Failed to load your courses')
+      console.error(result.error)
     }
+    
+    setEnrollments(result.data || [])
+    setIsFromCache(result.isFromCache || false)
     setLoading(false)
-  }
+  }, [user?.id])
 
   return (
     <Layout>
@@ -50,15 +69,75 @@ export default function StudentDashboard() {
           <StudentIdCard studentId={profile.student_id} />
         )}
 
+        {/* Pending Submissions Notice */}
+        {pendingCount > 0 && (
+          <div className="mt-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="font-medium text-primary-900">
+                  {pendingCount} pending {pendingCount === 1 ? 'submission' : 'submissions'}
+                </p>
+                <p className="text-sm text-primary-700">
+                  {isOnline 
+                    ? 'Your submissions will sync automatically.'
+                    : 'Your submissions will sync when you\'re back online.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Enrolled Courses Section */}
         <div className="mt-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">My Courses</h2>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+          {/* Search bar (shown when there are enrollments) */}
+          {!loading && enrollments.length > 0 && (
+            <div className="mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search courses..."
+                  className="input pl-10"
+                />
+                <svg 
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {isSearching && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                  </div>
+                )}
+              </div>
             </div>
-          ) : error ? (
+          )}
+
+          {/* Cached data indicator */}
+          {isFromCache && (
+            <div className="mb-4 p-3 bg-warning-50 border border-warning-200 rounded-lg text-sm text-warning-700 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Showing cached data. Some information may be outdated.
+            </div>
+          )}
+
+          {loading ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          ) : error && enrollments.length === 0 ? (
             <div className="text-center py-12 text-error-600">{error}</div>
           ) : enrollments.length === 0 ? (
             <EmptyState
@@ -72,9 +151,14 @@ export default function StudentDashboard() {
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {enrollments.map((enrollment) => (
+              {filteredEnrollments.map((enrollment) => (
                 <CourseCard key={enrollment.id} enrollment={enrollment} userId={user?.id} />
               ))}
+              {searchTerm && filteredEnrollments.length === 0 && (
+                <div className="col-span-full text-center py-8 text-gray-500">
+                  No courses found matching "{searchTerm}"
+                </div>
+              )}
             </div>
           )}
         </div>

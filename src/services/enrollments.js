@@ -1,4 +1,6 @@
 import { supabase } from './supabase'
+import * as offlineDb from './offlineDb'
+import { withOfflineSupport } from './offlineWrapper'
 
 /**
  * Find a student by their unique student ID (STU-xxxxxxxx-xxxx format)
@@ -86,26 +88,56 @@ export async function getClassRoster(courseId) {
 }
 
 /**
- * Get all enrollments for a student (their enrolled courses)
+ * Get all enrollments for a student (their enrolled courses) - with offline support
  */
 export async function getStudentEnrollments(studentId) {
-  const { data, error } = await supabase
-    .from('enrollments')
-    .select(`
-      id,
-      enrolled_at,
-      calculated_grade,
-      course:courses(
-        id,
-        name,
-        description,
-        teacher:profiles!courses_teacher_id_fkey(full_name)
-      )
-    `)
-    .eq('student_id', studentId)
-    .order('enrolled_at', { ascending: false })
-
-  return { data, error }
+  return withOfflineSupport({
+    apiCall: async () => {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          id,
+          enrolled_at,
+          calculated_grade,
+          course:courses(
+            id,
+            name,
+            description,
+            teacher:profiles!courses_teacher_id_fkey(full_name)
+          )
+        `)
+        .eq('student_id', studentId)
+        .order('enrolled_at', { ascending: false })
+      return { data, error }
+    },
+    getCached: async () => {
+      const enrollments = await offlineDb.getCachedEnrollmentsByStudent(studentId)
+      // For each enrollment, try to get cached course data
+      if (enrollments && enrollments.length > 0) {
+        for (const enrollment of enrollments) {
+          if (enrollment.course_id) {
+            const course = await offlineDb.getCachedCourse(enrollment.course_id)
+            enrollment.course = course || null
+          }
+        }
+      }
+      return enrollments
+    },
+    setCached: async (data) => {
+      // Cache enrollments with course_id for reference
+      const enrollmentsToCache = data.map(e => ({
+        ...e,
+        course_id: e.course?.id,
+        student_id: studentId
+      }))
+      await offlineDb.cacheEnrollments(enrollmentsToCache)
+      // Also cache the courses
+      const courses = data.filter(e => e.course).map(e => e.course)
+      if (courses.length > 0) {
+        await offlineDb.cacheCourses(courses)
+      }
+    }
+  })
 }
 
 /**
