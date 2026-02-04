@@ -6,6 +6,7 @@ import { markContentComplete, markContentIncomplete } from '../services/progress
 import Layout from '../components/common/Layout'
 import PdfViewer from '../components/content/PdfViewer'
 import VideoPlayer from '../components/content/VideoPlayer'
+import AssignmentViewer from '../components/assignment/AssignmentViewer'
 
 export default function ContentViewer() {
   const { contentId } = useParams()
@@ -272,11 +273,64 @@ export default function ContentViewer() {
             </div>
           )}
 
-          {content?.type === 'assignment' && (
+          {content?.type === 'assignment' && isStudent && (
+            <AssignmentViewer
+              content={content}
+              progress={progress}
+              onProgressUpdate={(newProgress) => setProgress(newProgress)}
+            />
+          )}
+
+          {content?.type === 'assignment' && isTeacher && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <p className="text-blue-700">
-                Assignment submission functionality coming soon.
-              </p>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-3xl">📝</span>
+                <div>
+                  <h3 className="font-semibold text-blue-900">Assignment Details</h3>
+                  <p className="text-blue-700 text-sm">
+                    {content.submission_type === 'file' ? 'File upload' : 
+                     content.submission_type === 'text' ? 'Text entry' : 'File upload or text entry'} required
+                  </p>
+                </div>
+              </div>
+              
+              {content.description && (
+                <p className="text-blue-800 mb-4">{content.description}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {content.due_date && (
+                  <div>
+                    <span className="font-medium text-blue-900">Due Date:</span>
+                    <span className="ml-2 text-blue-700">
+                      {new Date(content.due_date).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                )}
+                {content.total_points && (
+                  <div>
+                    <span className="font-medium text-blue-900">Total Points:</span>
+                    <span className="ml-2 text-blue-700">{content.total_points}</span>
+                  </div>
+                )}
+                {content.evaluation_type && (
+                  <div>
+                    <span className="font-medium text-blue-900">Evaluation Type:</span>
+                    <span className="ml-2 text-blue-700">
+                      {content.evaluation_type === 'of' ? 'OF Learning (Counts toward grade)' : 
+                       content.evaluation_type === 'for' ? 'FOR Learning (Diagnostic)' : 'AS Learning (Practice)'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <p className="text-sm text-blue-600">
+                  To grade submissions, go to the <strong>Grades</strong> tab in the course view.
+                </p>
+              </div>
             </div>
           )}
 
@@ -289,7 +343,7 @@ export default function ContentViewer() {
           )}
         </div>
 
-        {/* Mark Complete Button - for students viewing reading/video */}
+        {/* Mark Complete Button - for students viewing reading/video (not assignments - those complete via submission) */}
         {isStudent && (content?.type === 'reading' || content?.type === 'video') && (
           <div className="bg-white border border-gray-200 rounded-lg p-4 mb-8">
             <div className="flex items-center justify-between">

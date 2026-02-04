@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../services/supabase'
+import { getSubmittedStudents, getAssignmentGrades } from '../../services/assignments'
+import Modal from '../common/Modal'
+import TeacherGradingView from '../assignment/TeacherGradingView'
 
 export default function GradesTab({ course, isTeacher, studentId }) {
   const [loading, setLoading] = useState(true)
   const [grades, setGrades] = useState([])
+  const [assignments, setAssignments] = useState([])
   const [enrollmentGrade, setEnrollmentGrade] = useState(null)
   const [error, setError] = useState(null)
+  
+  // Assignment grading modal state
+  const [selectedAssignment, setSelectedAssignment] = useState(null)
+  const [showGradingView, setShowGradingView] = useState(false)
+  const [assignmentStats, setAssignmentStats] = useState({})
 
   useEffect(() => {
     if (isTeacher) {
@@ -33,12 +42,12 @@ export default function GradesTab({ course, isTeacher, studentId }) {
       setEnrollmentGrade(enrollment?.calculated_grade)
     }
 
-    // Fetch individual grades
+    // Fetch individual grades with assignment details
     const { data: gradesData, error: gradesError } = await supabase
       .from('grades')
       .select(`
         *,
-        assignment:content(id, name, type, category_weights, total_points)
+        assignment:content(id, name, type, category_weights, total_points, evaluation_type, module:modules(course_id))
       `)
       .eq('student_id', studentId)
 
@@ -46,7 +55,11 @@ export default function GradesTab({ course, isTeacher, studentId }) {
       setError('Failed to load grades')
       console.error(gradesError)
     } else {
-      setGrades(gradesData || [])
+      // Filter to only grades for this course
+      const courseGrades = gradesData?.filter(g => 
+        g.assignment?.module?.course_id === course.id
+      ) || []
+      setGrades(courseGrades)
     }
 
     setLoading(false)
@@ -54,9 +67,8 @@ export default function GradesTab({ course, isTeacher, studentId }) {
 
   const fetchTeacherGradesOverview = async () => {
     setLoading(true)
-    // For teachers, show assignments list with grading status
-    // This is a placeholder - full implementation would show all assignments with submission counts
     
+    // Fetch all assignments/quizzes for this course
     const { data, error } = await supabase
       .from('content')
       .select(`
@@ -64,19 +76,48 @@ export default function GradesTab({ course, isTeacher, studentId }) {
         name,
         type,
         total_points,
-        module:modules!inner(course_id)
+        due_date,
+        evaluation_type,
+        category_weights,
+        submission_type,
+        module:modules!inner(course_id, name)
       `)
       .eq('module.course_id', course.id)
       .in('type', ['assignment', 'quiz'])
+      .order('created_at', { ascending: true })
 
     if (error) {
       setError('Failed to load assignments')
       console.error(error)
     } else {
-      setGrades(data || [])
+      setAssignments(data || [])
+      
+      // Fetch submission and grading stats for each assignment
+      const stats = {}
+      for (const assignment of (data || [])) {
+        const { data: submitted } = await getSubmittedStudents(assignment.id)
+        const { data: graded } = await getAssignmentGrades(assignment.id)
+        stats[assignment.id] = {
+          submittedCount: submitted?.length || 0,
+          gradedCount: graded?.length || 0
+        }
+      }
+      setAssignmentStats(stats)
     }
 
     setLoading(false)
+  }
+
+  const handleOpenGradingView = (assignment) => {
+    setSelectedAssignment(assignment)
+    setShowGradingView(true)
+  }
+
+  const handleCloseGradingView = () => {
+    setShowGradingView(false)
+    setSelectedAssignment(null)
+    // Refresh stats
+    fetchTeacherGradesOverview()
   }
 
   if (loading) {
@@ -97,7 +138,32 @@ export default function GradesTab({ course, isTeacher, studentId }) {
   }
 
   // Teacher view
-  return <TeacherGradesView assignments={grades} courseId={course.id} />
+  return (
+    <>
+      <TeacherGradesOverview 
+        assignments={assignments} 
+        courseId={course.id} 
+        assignmentStats={assignmentStats}
+        onOpenGrading={handleOpenGradingView}
+      />
+      
+      {/* Assignment Grading Modal */}
+      <Modal
+        isOpen={showGradingView}
+        onClose={handleCloseGradingView}
+        title="Grade Assignment"
+        maxWidth="max-w-6xl"
+      >
+        {selectedAssignment && (
+          <TeacherGradingView
+            assignment={selectedAssignment}
+            courseId={course.id}
+            onClose={handleCloseGradingView}
+          />
+        )}
+      </Modal>
+    </>
+  )
 }
 
 function StudentGradesView({ grades, enrollmentGrade, categoryWeights }) {
@@ -202,7 +268,16 @@ function StudentGradesView({ grades, enrollmentGrade, categoryWeights }) {
   )
 }
 
-function TeacherGradesView({ assignments, courseId }) {
+function TeacherGradesOverview({ assignments, courseId, assignmentStats, onOpenGrading }) {
+  const formatDate = (dateString) => {
+    if (!dateString) return null
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
   return (
     <div>
       <h2 className="text-xl font-semibold text-gray-900 mb-6">Assignments & Quizzes</h2>
@@ -210,30 +285,88 @@ function TeacherGradesView({ assignments, courseId }) {
       {assignments.length === 0 ? (
         <div className="card p-6 text-center text-gray-500">
           No assignments or quizzes have been created yet.
+          <p className="text-sm mt-2">Add assignments from the Modules tab.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {assignments.map((assignment) => (
-            <div key={assignment.id} className="card p-4 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">
-                    {assignment.type === 'quiz' ? '❓' : '📝'}
-                  </span>
-                  <div>
-                    <h3 className="font-medium text-gray-900">{assignment.name}</h3>
-                    <p className="text-sm text-gray-500 capitalize">{assignment.type}</p>
+          {assignments.map((assignment) => {
+            const stats = assignmentStats[assignment.id] || { submittedCount: 0, gradedCount: 0 }
+            const isPastDue = assignment.due_date && new Date() > new Date(assignment.due_date)
+            
+            return (
+              <div 
+                key={assignment.id} 
+                className="card p-4 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => onOpenGrading(assignment)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
+                      {assignment.type === 'quiz' ? '❓' : '📝'}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900">{assignment.name}</h3>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          assignment.evaluation_type === 'of' 
+                            ? 'bg-success-100 text-success-700' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {assignment.evaluation_type === 'of' ? 'OF' : 
+                           assignment.evaluation_type === 'for' ? 'FOR' : 'AS'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {assignment.module?.name}
+                        {assignment.due_date && (
+                          <span className={isPastDue ? 'text-error-600 ml-2' : 'ml-2'}>
+                            • Due {formatDate(assignment.due_date)}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-6">
+                    {/* Submission Stats */}
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-primary-600">
+                        {stats.submittedCount}
+                      </p>
+                      <p className="text-xs text-gray-500">submitted</p>
+                    </div>
+                    
+                    {/* Graded Stats */}
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-success-600">
+                        {stats.gradedCount}
+                      </p>
+                      <p className="text-xs text-gray-500">graded</p>
+                    </div>
+                    
+                    {/* Points */}
+                    <div className="text-center min-w-[60px]">
+                      {assignment.total_points && (
+                        <>
+                          <p className="text-lg font-semibold text-gray-600">
+                            {assignment.total_points}
+                          </p>
+                          <p className="text-xs text-gray-500">points</p>
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Action */}
+                    <div className="text-primary-600">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  {assignment.total_points && (
-                    <p className="text-sm text-gray-600">{assignment.total_points} points</p>
-                  )}
-                  <p className="text-sm text-primary-600 font-medium">View Submissions →</p>
-                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

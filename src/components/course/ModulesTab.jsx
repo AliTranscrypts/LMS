@@ -657,7 +657,23 @@ function ModuleCard({
                               <p className={`font-medium ${isContentComplete ? 'text-success-700' : 'text-gray-900'}`}>
                                 {item.name}
                               </p>
-                              <p className="text-sm text-gray-500 capitalize">{item.type}</p>
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <span className="capitalize">{item.type}</span>
+                                {item.due_date && (
+                                  <>
+                                    <span>•</span>
+                                    <span className={new Date() > new Date(item.due_date) ? 'text-error-600' : ''}>
+                                      Due {new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  </>
+                                )}
+                                {item.total_points && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{item.total_points} pts</span>
+                                  </>
+                                )}
+                              </div>
                             </div>
                             {isTeacher && (
                               <button
