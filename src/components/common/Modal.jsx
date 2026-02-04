@@ -1,6 +1,13 @@
 import { useEffect } from 'react'
 
-export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }) {
+const SIZE_CLASSES = {
+  small: 'max-w-sm',
+  default: 'max-w-md',
+  large: 'max-w-2xl',
+  xlarge: 'max-w-4xl'
+}
+
+export default function Modal({ isOpen, onClose, title, children, size = 'default', maxWidth }) {
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e) => {
@@ -20,6 +27,9 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
 
   if (!isOpen) return null
 
+  // Support both size prop and legacy maxWidth prop
+  const widthClass = maxWidth || SIZE_CLASSES[size] || SIZE_CLASSES.default
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
@@ -30,7 +40,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
       
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className={`relative bg-white rounded-xl shadow-xl w-full ${maxWidth} transform transition-all`}>
+        <div className={`relative bg-white rounded-xl shadow-xl w-full ${widthClass} transform transition-all max-h-[90vh] flex flex-col`}>
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
@@ -45,7 +55,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
           </div>
           
           {/* Content */}
-          <div className="p-4">
+          <div className="p-4 overflow-y-auto">
             {children}
           </div>
         </div>

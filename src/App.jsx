@@ -10,6 +10,7 @@ import AuthGuard from './components/auth/AuthGuard'
 // Main pages
 import Dashboard from './pages/Dashboard'
 import CourseView from './pages/CourseView'
+import ContentViewer from './pages/ContentViewer'
 import Profile from './pages/Profile'
 
 function AppRoutes() {
@@ -53,6 +54,14 @@ function AppRoutes() {
         element={
           <AuthGuard>
             <CourseView />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/content/:contentId"
+        element={
+          <AuthGuard>
+            <ContentViewer />
           </AuthGuard>
         }
       />

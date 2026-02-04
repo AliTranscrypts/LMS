@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getCourse } from '../services/courses'
-import { getClassRoster } from '../services/enrollments'
+import { getClassRoster, getEnrollmentCount } from '../services/enrollments'
 import Layout from '../components/common/Layout'
 import Tabs from '../components/common/Tabs'
 import SyllabusTab from '../components/course/SyllabusTab'
 import ModulesTab from '../components/course/ModulesTab'
 import GradesTab from '../components/course/GradesTab'
 import StudentsTab from '../components/course/StudentsTab'
+import { CourseEditModal, CourseArchiveModal, CourseSettingsDropdown } from '../components/course/CourseSettings'
 
 export default function CourseView() {
   const { courseId } = useParams()
@@ -17,7 +18,12 @@ export default function CourseView() {
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('syllabus')
+  const [activeTab, setActiveTab] = useState('modules') // Default to modules as per spec
+  const [enrollmentCount, setEnrollmentCount] = useState(0)
+
+  // Course settings modals
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showArchiveModal, setShowArchiveModal] = useState(false)
 
   useEffect(() => {
     fetchCourse()
@@ -32,8 +38,15 @@ export default function CourseView() {
       console.error(error)
     } else {
       setCourse(data)
+      // Fetch enrollment count for archive warning
+      const { data: countData } = await getEnrollmentCount(courseId)
+      setEnrollmentCount(countData?.count || 0)
     }
     setLoading(false)
+  }
+
+  const handleCourseArchived = () => {
+    navigate('/dashboard')
   }
 
   // Teacher tabs
@@ -103,16 +116,32 @@ export default function CourseView() {
       {/* Course Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-4 mb-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900">{course.name}</h1>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">{course.name}</h1>
+                {course.description && (
+                  <p className="text-sm text-gray-500 mt-1">{course.description}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Course Settings (Teacher only) */}
+            {isTeacher && (
+              <CourseSettingsDropdown
+                course={course}
+                onEdit={() => setShowEditModal(true)}
+                onArchive={() => setShowArchiveModal(true)}
+              />
+            )}
           </div>
           
           {/* Tabs */}
@@ -124,6 +153,26 @@ export default function CourseView() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {renderTabContent()}
       </div>
+
+      {/* Course Edit Modal */}
+      {isTeacher && (
+        <>
+          <CourseEditModal
+            course={course}
+            isOpen={showEditModal}
+            onClose={() => setShowEditModal(false)}
+            onUpdate={fetchCourse}
+          />
+
+          <CourseArchiveModal
+            course={course}
+            isOpen={showArchiveModal}
+            onClose={() => setShowArchiveModal(false)}
+            onArchive={handleCourseArchived}
+            enrollmentCount={enrollmentCount}
+          />
+        </>
+      )}
     </Layout>
   )
 }

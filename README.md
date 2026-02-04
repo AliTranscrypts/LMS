@@ -8,6 +8,8 @@ A modern Learning Management System built with React, Vite, Tailwind CSS, and Su
 - **Registration with Unique ID**: Students receive a unique ID (STU-xxxxxxxx-xxxx format) upon registration
 - **Student ID Display**: ID is prominently displayed on dashboard and profile with copy-to-clipboard functionality
 - **Course Dashboard**: View enrolled courses with progress indicators
+- **Content Viewing**: View PDFs in browser with download option, watch videos with full player controls
+- **Progress Tracking**: Mark content as complete with visual progress indicators
 - **Class Roster**: View names of other students enrolled in the same course (privacy-protected - no access to grades/work)
 - **Grade Viewing**: See overall grade with category breakdown (Knowledge & Understanding, Thinking, Application, Communication)
 
@@ -16,11 +18,15 @@ A modern Learning Management System built with React, Vite, Tailwind CSS, and Su
 - **Student Enrollment**: Enroll students by entering their unique Student ID
 - **Class Roster Management**: View all enrolled students with enrollment dates and grades
 - **Module Organization**: Create modules and organize course content
+- **File Uploads**: Upload PDFs (up to 50MB) and videos (up to 2GB) with resumable uploads and progress tracking
 
 ### Technical Features
 - **Row Level Security (RLS)**: Database-enforced security ensures students can only access their own data
 - **Ontario Curriculum Grading**: Supports 4-category grading with weighted calculations
 - **Evaluation Types**: Supports FOR Learning, AS Learning, and OF Learning assignments
+- **Resumable File Uploads**: TUS protocol support for large video uploads with automatic resume
+- **Video Player**: Plyr-based video player with customizable controls, speed adjustment, and fullscreen
+- **PDF Viewer**: In-browser PDF viewing with download option
 
 ## Tech Stack
 
@@ -65,8 +71,17 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 Run the SQL migrations in your Supabase dashboard:
 - Go to SQL Editor in your Supabase project
 - Copy and run the contents of `supabase/migrations/001_initial_schema.sql`
+- Copy and run the contents of `supabase/migrations/002_file_uploads.sql`
 
-5. Start the development server:
+5. Set up Supabase Storage:
+
+Create a storage bucket for course content:
+- Go to Storage in your Supabase project
+- Create a new bucket named `course-content`
+- Set it as a private bucket
+- Add the storage policies from `supabase/migrations/002_file_uploads.sql` (see comments at the bottom of the file)
+
+6. Start the development server:
 ```bash
 npm run dev
 ```
@@ -77,7 +92,8 @@ npm run dev
 src/
 ├── components/           # Reusable UI components
 │   ├── auth/            # Authentication components (Login, SignUp, AuthGuard)
-│   ├── common/          # Common components (Layout, Modal, EmptyState, Tabs)
+│   ├── common/          # Common components (Layout, Modal, EmptyState, Tabs, FileUpload)
+│   ├── content/         # Content viewers (PdfViewer, VideoPlayer)
 │   ├── course/          # Course-related components (tabs, roster)
 │   └── dashboard/       # Dashboard components
 ├── contexts/            # React Context providers
@@ -85,12 +101,15 @@ src/
 ├── pages/               # Page-level components
 │   ├── Dashboard.jsx    # Main dashboard (routes to Teacher/Student)
 │   ├── CourseView.jsx   # Course detail view with tabs
+│   ├── ContentViewer.jsx # Content viewing page with progress tracking
 │   └── Profile.jsx      # User profile page
 ├── services/            # API service layer
 │   ├── supabase.js      # Supabase client setup
 │   ├── courses.js       # Course CRUD operations
 │   ├── enrollments.js   # Enrollment operations
-│   └── progress.js      # Progress tracking
+│   ├── modules.js       # Module and content operations
+│   ├── progress.js      # Progress tracking
+│   └── uploads.js       # File upload service with TUS protocol
 └── App.jsx              # Main application with routing
 ```
 

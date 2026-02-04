@@ -20,8 +20,11 @@
 
   --color-warning-50: #fffbeb;
   --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
   --color-warning-500: #f59e0b;
   --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
 
   --color-error-50: #fef2f2;
   --color-error-100: #fee2e2;
@@ -58,6 +61,10 @@
   
   .btn-danger {
     @apply bg-error-500 text-white hover:bg-error-600 focus:ring-error-500;
+  }
+  
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
   }
   
   .input {

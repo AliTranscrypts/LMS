@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { getStudentEnrollments } from '../../services/enrollments'
+import { getStudentCourseProgress } from '../../services/progress'
 import Layout from '../common/Layout'
 import StudentIdCard from './StudentIdCard'
 import EmptyState from '../common/EmptyState'
@@ -72,7 +73,7 @@ export default function StudentDashboard() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {enrollments.map((enrollment) => (
-                <CourseCard key={enrollment.id} enrollment={enrollment} />
+                <CourseCard key={enrollment.id} enrollment={enrollment} userId={user?.id} />
               ))}
             </div>
           )}
@@ -82,9 +83,20 @@ export default function StudentDashboard() {
   )
 }
 
-function CourseCard({ enrollment }) {
+function CourseCard({ enrollment, userId }) {
   const { course, calculated_grade } = enrollment
-  const progress = calculated_grade?.final_grade
+  const gradeProgress = calculated_grade?.final_grade
+  const [contentProgress, setContentProgress] = useState(null)
+
+  useEffect(() => {
+    const fetchProgress = async () => {
+      const { data } = await getStudentCourseProgress(userId, course.id)
+      setContentProgress(data)
+    }
+    if (userId) {
+      fetchProgress()
+    }
+  }, [userId, course.id])
 
   return (
     <Link
@@ -107,18 +119,56 @@ function CourseCard({ enrollment }) {
         </p>
       )}
 
-      {/* Progress indicator */}
-      <div className="mt-4">
-        {progress !== undefined && progress !== null ? (
+      {/* Content Progress indicator */}
+      {contentProgress && contentProgress.totalContent > 0 && (
+        <div className="mb-3">
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-gray-600">Content Progress</span>
+            <span className="font-medium text-gray-900">
+              {contentProgress.completedContent} of {contentProgress.totalContent} ({contentProgress.percentComplete}%)
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-primary-500 h-2 rounded-full transition-all"
+              style={{ width: `${contentProgress.percentComplete}%` }}
+            ></div>
+          </div>
+          {/* Module completion summary */}
+          {contentProgress.modules && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {contentProgress.modules.map((module, idx) => (
+                <span 
+                  key={module.id}
+                  className={`text-xs px-2 py-0.5 rounded ${
+                    module.totalCount > 0 && module.completedCount === module.totalCount
+                      ? 'bg-success-100 text-success-700'
+                      : module.completedCount > 0
+                      ? 'bg-primary-100 text-primary-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                  title={`${module.name}: ${module.completedCount}/${module.totalCount}`}
+                >
+                  {module.totalCount > 0 && module.completedCount === module.totalCount ? '✓' : `${module.completedCount}/${module.totalCount}`}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Grade Progress indicator */}
+      <div className="mt-2">
+        {gradeProgress !== undefined && gradeProgress !== null ? (
           <div>
             <div className="flex justify-between text-sm mb-1">
               <span className="text-gray-600">Grade</span>
-              <span className="font-medium text-gray-900">{progress}%</span>
+              <span className="font-medium text-gray-900">{gradeProgress}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-success-500 h-2 rounded-full transition-all"
-                style={{ width: `${Math.min(progress, 100)}%` }}
+                style={{ width: `${Math.min(gradeProgress, 100)}%` }}
               ></div>
             </div>
           </div>

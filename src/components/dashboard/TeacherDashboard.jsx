@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { getTeacherCourses, createCourse } from '../../services/courses'
 import Layout from '../common/Layout'
 import EmptyState from '../common/EmptyState'
 import Modal from '../common/Modal'
+import QuillEditor from '../common/QuillEditor'
 
 export default function TeacherDashboard() {
   const { profile, user } = useAuth()
@@ -41,6 +42,7 @@ export default function TeacherDashboard() {
     }
     
     setShowCreateModal(false)
+    // Navigate to the modules tab of the new course (as per spec)
     navigate(`/courses/${data.id}`)
     return { error: null }
   }
@@ -175,8 +177,10 @@ function TeacherCourseCard({ course }) {
 function CreateCourseModal({ isOpen, onClose, onSubmit }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [syllabus, setSyllabus] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showSyllabusEditor, setShowSyllabusEditor] = useState(false)
   
   const [weights, setWeights] = useState({
     ku: 25,
@@ -187,6 +191,23 @@ function CreateCourseModal({ isOpen, onClose, onSubmit }) {
 
   const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0)
   const isValidWeight = totalWeight === 100
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setName('')
+      setDescription('')
+      setSyllabus(null)
+      setError('')
+      setShowSyllabusEditor(false)
+      setWeights({
+        ku: 25,
+        thinking: 25,
+        application: 25,
+        communication: 25
+      })
+    }
+  }, [isOpen])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -204,8 +225,9 @@ function CreateCourseModal({ isOpen, onClose, onSubmit }) {
 
     setLoading(true)
     const result = await onSubmit({
-      name,
-      description,
+      name: name.trim(),
+      description: description.trim() || null,
+      syllabus,
       categoryWeights: weights
     })
 
@@ -225,7 +247,7 @@ function CreateCourseModal({ isOpen, onClose, onSubmit }) {
   if (!isOpen) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create New Course">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create New Course" size="large">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-error-50 border border-error-500 text-error-600 rounded-md text-sm">
@@ -258,8 +280,52 @@ function CreateCourseModal({ isOpen, onClose, onSubmit }) {
           />
         </div>
 
+        {/* Syllabus Section */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="label mb-0">Course Syllabus</label>
+            {!showSyllabusEditor && (
+              <button
+                type="button"
+                onClick={() => setShowSyllabusEditor(true)}
+                className="text-sm text-primary-600 hover:text-primary-700"
+              >
+                + Add Syllabus
+              </button>
+            )}
+          </div>
+          
+          {showSyllabusEditor ? (
+            <div>
+              <QuillEditor
+                value={syllabus}
+                onChange={setSyllabus}
+                placeholder="Write your course syllabus here. You can add it later if you prefer."
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSyllabusEditor(false)
+                  setSyllabus(null)
+                }}
+                className="mt-2 text-sm text-gray-500 hover:text-gray-700"
+              >
+                Remove syllabus
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">
+              You can add a detailed syllabus with rich formatting, images, and videos. 
+              This can also be added later from the course page.
+            </p>
+          )}
+        </div>
+
         <div>
           <label className="label">Grading Category Weights (must total 100%)</label>
+          <p className="text-xs text-gray-500 mb-2">
+            These are the Ontario curriculum assessment categories used for grading.
+          </p>
           <div className="grid grid-cols-2 gap-3 mt-2">
             {[
               { key: 'ku', label: 'Knowledge & Understanding' },
