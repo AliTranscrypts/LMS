@@ -84,6 +84,12 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
   const [fileData, setFileData] = useState(null)
   const [uploadComplete, setUploadComplete] = useState(false)
 
+  // Assignment attachment state (optional document/video for students to view)
+  const [attachmentType, setAttachmentType] = useState(initialData.attachment_type || 'none')
+  const [attachmentData, setAttachmentData] = useState(null)
+  const [attachmentUploadComplete, setAttachmentUploadComplete] = useState(false)
+  const [attachmentContentId] = useState(() => crypto.randomUUID())
+
   // Assignment-specific fields
   const [submissionType, setSubmissionType] = useState(initialData.submission_type || 'file')
   const [dueDate, setDueDate] = useState(initialData.due_date ? initialData.due_date.split('T')[0] : '')
@@ -107,6 +113,18 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
     setUploadComplete(true)
   }
 
+  const handleAttachmentUploadComplete = (data) => {
+    setAttachmentData(data)
+    setAttachmentUploadComplete(true)
+  }
+
+  const handleAttachmentTypeChange = (newType) => {
+    setAttachmentType(newType)
+    // Reset attachment data when changing type
+    setAttachmentData(null)
+    setAttachmentUploadComplete(false)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -124,6 +142,12 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
 
     if ((type === 'assignment' || type === 'quiz') && !isValidWeight) {
       setError('Category weights must sum to 100%')
+      return
+    }
+
+    // Validate attachment upload if attachment type is selected
+    if (type === 'assignment' && attachmentType !== 'none' && !attachmentUploadComplete) {
+      setError('Please upload the attachment file or select "No Attachment"')
       return
     }
 
@@ -149,6 +173,15 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
       contentData.totalPoints = parseInt(totalPoints)
       contentData.evaluationType = evaluationType
       contentData.categoryWeights = categoryWeights
+    }
+
+    // Add attachment data for assignments
+    if (type === 'assignment' && attachmentType !== 'none' && attachmentData) {
+      contentData.attachmentType = attachmentType
+      contentData.attachmentUrl = attachmentData.path
+      contentData.attachmentFileName = attachmentData.fileName
+      contentData.attachmentFileSize = attachmentData.fileSize
+      contentData.attachmentFileType = attachmentData.fileType
     }
 
     const result = await onSubmit(contentData)
@@ -322,6 +355,50 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
               Total: {totalWeight}% {isValidWeight ? '✓' : '(must equal 100%)'}
             </div>
           </div>
+
+          {/* Assignment Attachment (optional document/video for students) */}
+          {type === 'assignment' && courseId && (
+            <div className="border-t pt-4">
+              <label className="label">Assignment Materials (Optional)</label>
+              <p className="text-xs text-gray-500 mb-3">
+                Upload a worksheet, instructions document, or video for students to view before completing the assignment.
+              </p>
+              
+              {/* Attachment Type Selection */}
+              <div className="flex gap-3 mb-4">
+                {[
+                  { value: 'none', label: 'No Attachment', icon: '✕' },
+                  { value: 'assignment_document', label: 'Document', icon: '📄' },
+                  { value: 'assignment_video', label: 'Video', icon: '🎥' }
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleAttachmentTypeChange(option.value)}
+                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                      attachmentType === option.value
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <span>{option.icon}</span>
+                    <span className="text-sm font-medium">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Attachment Upload */}
+              {attachmentType !== 'none' && (
+                <FileUpload
+                  contentType={attachmentType}
+                  courseId={courseId}
+                  contentId={attachmentContentId}
+                  onUploadComplete={handleAttachmentUploadComplete}
+                  onUploadError={(err) => setError(err.message)}
+                />
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -345,7 +422,12 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
       <div className="flex gap-3 pt-4">
         <button
           type="submit"
-          disabled={loading || ((type === 'assignment' || type === 'quiz') && !isValidWeight) || (requiresFile && !uploadComplete)}
+          disabled={
+            loading || 
+            ((type === 'assignment' || type === 'quiz') && !isValidWeight) || 
+            (requiresFile && !uploadComplete) ||
+            (type === 'assignment' && attachmentType !== 'none' && !attachmentUploadComplete)
+          }
           className="btn btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Creating...' : 'Create Content'}

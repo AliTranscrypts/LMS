@@ -14,6 +14,19 @@ export const FILE_LIMITS = {
     allowedTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'],
     extensions: ['.mp4', '.mov', '.webm', '.avi'],
     label: 'MP4, MOV, WebM, or AVI video'
+  },
+  // Assignment attachments - supports both documents and videos for worksheets, instructions, etc.
+  assignment_document: {
+    maxSize: 50 * 1024 * 1024, // 50MB
+    allowedTypes: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'image/jpeg', 'image/png', 'image/gif'],
+    extensions: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif'],
+    label: 'PDF, Word, Excel, PowerPoint, or image file'
+  },
+  assignment_video: {
+    maxSize: 2 * 1024 * 1024 * 1024, // 2GB
+    allowedTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'],
+    extensions: ['.mp4', '.mov', '.webm', '.avi'],
+    label: 'MP4, MOV, WebM, or AVI video'
   }
 }
 

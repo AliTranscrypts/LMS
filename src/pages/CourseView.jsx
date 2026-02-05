@@ -35,23 +35,38 @@ export default function CourseView() {
   }, [profile?.role, activeTab])
 
   useEffect(() => {
+    // Reset state when courseId changes to prevent stale data
+    setLoading(true)
+    setError(null)
+    setCourse(null)
+    
     fetchCourse()
   }, [courseId])
 
   const fetchCourse = async () => {
-    setLoading(true)
-    const { data, error } = await getCourse(courseId)
-    
-    if (error) {
-      setError('Course not found or you do not have access')
-      console.error(error)
-    } else {
-      setCourse(data)
-      // Fetch enrollment count for archive warning
-      const { count } = await getEnrollmentCount(courseId)
-      setEnrollmentCount(count || 0)
+    try {
+      const { data, error } = await getCourse(courseId)
+      
+      if (error) {
+        setError('Course not found or you do not have access')
+        console.error('Course fetch error:', error)
+      } else {
+        setCourse(data)
+        // Fetch enrollment count for archive warning (non-blocking)
+        try {
+          const { count } = await getEnrollmentCount(courseId)
+          setEnrollmentCount(count || 0)
+        } catch (countErr) {
+          console.error('Enrollment count error:', countErr)
+          // Don't fail the whole load for this
+        }
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching course:', err)
+      setError('Failed to load course. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleCourseArchived = () => {

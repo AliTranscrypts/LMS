@@ -357,54 +357,61 @@ export default function ContentViewer() {
           )}
 
           {content?.type === 'assignment' && isTeacher && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-3xl">📝</span>
-                <div>
-                  <h3 className="font-semibold text-blue-900">Assignment Details</h3>
-                  <p className="text-blue-700 text-sm">
-                    {content.submission_type === 'file' ? 'File upload' : 
-                     content.submission_type === 'text' ? 'Text entry' : 'File upload or text entry'} required
-                  </p>
-                </div>
-              </div>
-              
-              {content.description && (
-                <p className="text-blue-800 mb-4">{content.description}</p>
+            <div className="space-y-4">
+              {/* Assignment Attachment Preview */}
+              {content.attachment_type && content.attachment_url && (
+                <TeacherAttachmentPreview content={content} />
               )}
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                {content.due_date && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-3xl">📝</span>
                   <div>
-                    <span className="font-medium text-blue-900">Due Date:</span>
-                    <span className="ml-2 text-blue-700">
-                      {new Date(content.due_date).toLocaleDateString('en-US', {
-                        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
-                      })}
-                    </span>
+                    <h3 className="font-semibold text-blue-900">Assignment Details</h3>
+                    <p className="text-blue-700 text-sm">
+                      {content.submission_type === 'file' ? 'File upload' : 
+                       content.submission_type === 'text' ? 'Text entry' : 'File upload or text entry'} required
+                    </p>
                   </div>
+                </div>
+                
+                {content.description && (
+                  <p className="text-blue-800 mb-4">{content.description}</p>
                 )}
-                {content.total_points && (
-                  <div>
-                    <span className="font-medium text-blue-900">Total Points:</span>
-                    <span className="ml-2 text-blue-700">{content.total_points}</span>
-                  </div>
-                )}
-                {content.evaluation_type && (
-                  <div>
-                    <span className="font-medium text-blue-900">Evaluation Type:</span>
-                    <span className="ml-2 text-blue-700">
-                      {content.evaluation_type === 'of' ? 'OF Learning (Counts toward grade)' : 
-                       content.evaluation_type === 'for' ? 'FOR Learning (Diagnostic)' : 'AS Learning (Practice)'}
-                    </span>
-                  </div>
-                )}
-              </div>
 
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <p className="text-sm text-blue-600">
-                  To grade submissions, go to the <strong>Grades</strong> tab in the course view.
-                </p>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {content.due_date && (
+                    <div>
+                      <span className="font-medium text-blue-900">Due Date:</span>
+                      <span className="ml-2 text-blue-700">
+                        {new Date(content.due_date).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {content.total_points && (
+                    <div>
+                      <span className="font-medium text-blue-900">Total Points:</span>
+                      <span className="ml-2 text-blue-700">{content.total_points}</span>
+                    </div>
+                  )}
+                  {content.evaluation_type && (
+                    <div>
+                      <span className="font-medium text-blue-900">Evaluation Type:</span>
+                      <span className="ml-2 text-blue-700">
+                        {content.evaluation_type === 'of' ? 'OF Learning (Counts toward grade)' : 
+                         content.evaluation_type === 'for' ? 'FOR Learning (Diagnostic)' : 'AS Learning (Practice)'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-blue-200">
+                  <p className="text-sm text-blue-600">
+                    To grade submissions, go to the <strong>Grades</strong> tab in the course view.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -630,6 +637,184 @@ function TeacherQuizView({ content, onQuizSaved }) {
           Multiple choice and true/false questions are auto-graded. Short answer and essay questions require manual grading.
         </p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * TeacherAttachmentPreview - Teacher's view to preview/download assignment attachments
+ */
+function TeacherAttachmentPreview({ content }) {
+  const [loading, setLoading] = useState(true)
+  const [signedUrl, setSignedUrl] = useState(null)
+  const [error, setError] = useState(null)
+
+  const isVideo = content.attachment_type === 'assignment_video'
+  const isDocument = content.attachment_type === 'assignment_document'
+  const isPdf = content.attachment_file_type === 'application/pdf'
+  const isImage = content.attachment_file_type?.startsWith('image/')
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Load signed URL on mount
+  useEffect(() => {
+    const loadSignedUrl = async () => {
+      try {
+        const { data, error: urlError } = await getSignedUrl(content.attachment_url, 3600)
+        if (urlError) {
+          console.error('Error generating signed URL:', urlError)
+          setError('Unable to load attachment')
+          return
+        }
+        setSignedUrl(data.signedUrl)
+      } catch (err) {
+        console.error('Error loading attachment:', err)
+        setError('Unable to load attachment')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadSignedUrl()
+  }, [content.attachment_url])
+
+  const handleDownload = () => {
+    if (!signedUrl) return
+    const link = document.createElement('a')
+    link.href = signedUrl
+    link.download = content.attachment_file_name || 'attachment'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleOpenInNewTab = () => {
+    if (signedUrl) {
+      window.open(signedUrl, '_blank')
+    }
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">{isVideo ? '🎥' : '📄'}</span>
+          <h3 className="font-semibold text-indigo-900">
+            Assignment Materials
+          </h3>
+          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+            {isVideo ? 'Video' : 'Document'}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleOpenInNewTab}
+            disabled={!signedUrl}
+            className="btn btn-secondary text-sm px-3 py-1.5 disabled:opacity-50 flex items-center gap-1"
+            title="Open in new tab"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!signedUrl}
+            className="btn btn-secondary text-sm px-3 py-1.5 disabled:opacity-50 flex items-center gap-1"
+            title="Download"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white rounded-lg p-12 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="text-gray-600 mt-3">Loading attachment...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="bg-white rounded-lg p-8 text-center">
+          <div className="text-4xl mb-2">⚠️</div>
+          <p className="text-gray-600">{error}</p>
+        </div>
+      )}
+
+      {/* Video Player - shown by default */}
+      {!loading && !error && isVideo && signedUrl && (
+        <div className="mb-4 rounded-lg overflow-hidden bg-black">
+          <video
+            src={signedUrl}
+            controls
+            className="w-full max-h-[500px]"
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      )}
+
+      {/* PDF Viewer - shown by default */}
+      {!loading && !error && isPdf && signedUrl && (
+        <div className="mb-4 bg-white rounded-lg border overflow-hidden">
+          <iframe
+            src={signedUrl}
+            className="w-full h-[500px]"
+            title="PDF Preview"
+          />
+        </div>
+      )}
+
+      {/* Image Preview - shown by default */}
+      {!loading && !error && isImage && signedUrl && (
+        <div className="mb-4 bg-white rounded-lg border overflow-hidden p-4">
+          <img
+            src={signedUrl}
+            alt={content.attachment_file_name || 'Attachment'}
+            className="max-w-full max-h-[500px] mx-auto"
+          />
+        </div>
+      )}
+
+      {/* Non-previewable document message */}
+      {!loading && !error && isDocument && !isPdf && !isImage && signedUrl && (
+        <div className="mb-4 bg-white rounded-lg border p-8 text-center">
+          <div className="text-5xl mb-3">📄</div>
+          <p className="text-gray-700 font-medium">{content.attachment_file_name}</p>
+          <p className="text-gray-500 text-sm mt-1">
+            This document type cannot be previewed inline. Use the buttons above to open or download.
+          </p>
+        </div>
+      )}
+
+      {/* File Info */}
+      {!loading && !error && (
+        <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
+          <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+            <span className="text-lg">{isVideo ? '🎬' : '📋'}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-gray-900 truncate text-sm">
+              {content.attachment_file_name || (isVideo ? 'Video Material' : 'Document')}
+            </p>
+            <p className="text-xs text-gray-500">
+              {formatFileSize(content.attachment_file_size)}
+              {content.attachment_file_type && ` • ${content.attachment_file_type.split('/')[1]?.toUpperCase()}`}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

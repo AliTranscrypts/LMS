@@ -18,17 +18,28 @@ export async function findStudentByStudentId(studentId) {
 
 /**
  * Enroll a student in a course
+ * @param {string} courseId - The course ID
+ * @param {string} studentProfileId - The student's profile ID
+ * @param {string|null} termId - Optional term ID for the enrollment
  */
-export async function enrollStudent(courseId, studentProfileId) {
+export async function enrollStudent(courseId, studentProfileId, termId = null) {
+  const insertData = {
+    course_id: courseId,
+    student_id: studentProfileId,
+  }
+  
+  // Only include term_id if provided
+  if (termId) {
+    insertData.term_id = termId
+  }
+
   const { data, error } = await supabase
     .from('enrollments')
-    .insert({
-      course_id: courseId,
-      student_id: studentProfileId,
-    })
+    .insert(insertData)
     .select(`
       *,
-      student:profiles!enrollments_student_id_fkey(id, full_name, student_id)
+      student:profiles!enrollments_student_id_fkey(id, full_name, student_id),
+      term:terms(id, name)
     `)
     .single()
 
@@ -49,22 +60,37 @@ export async function unenrollStudent(enrollmentId) {
 
 /**
  * Get all enrollments for a course (for teachers - class roster)
+ * @param {string} courseId - The course ID
+ * @param {string|null} termId - Optional term ID to filter by (null = all terms, 'none' = no term)
  */
-export async function getCourseEnrollments(courseId) {
-  const { data, error } = await supabase
+export async function getCourseEnrollments(courseId, termId = null) {
+  let query = supabase
     .from('enrollments')
     .select(`
       id,
       enrolled_at,
       calculated_grade,
+      term_id,
       student:profiles!enrollments_student_id_fkey(
         id,
         full_name,
         student_id
-      )
+      ),
+      term:terms(id, name)
     `)
     .eq('course_id', courseId)
-    .order('enrolled_at', { ascending: true })
+
+  // Filter by term if specified
+  if (termId === 'none') {
+    // Filter for enrollments with no term
+    query = query.is('term_id', null)
+  } else if (termId) {
+    // Filter for specific term
+    query = query.eq('term_id', termId)
+  }
+  // If termId is null/undefined, return all enrollments
+
+  const { data, error } = await query.order('enrolled_at', { ascending: true })
 
   return { data, error }
 }

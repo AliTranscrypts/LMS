@@ -232,8 +232,38 @@ function AttemptGradingView({ attempt, quizConfig, graderId, onBack, onGraded })
   const [success, setSuccess] = useState(null)
   
   // Manual grades for questions that need grading
-  const [manualGrades, setManualGrades] = useState({})
+  // Initialize from existing manual_grades in the attempt (if any)
+  const [manualGrades, setManualGrades] = useState(() => {
+    // Load existing manual grades from the attempt data
+    const existingGrades = attempt.manual_grades || {}
+    const initialGrades = {}
+    
+    // Convert database format to UI format
+    Object.entries(existingGrades).forEach(([questionId, gradeData]) => {
+      initialGrades[questionId] = {
+        points: gradeData.points ?? '',
+        feedback: gradeData.feedback || ''
+      }
+    })
+    
+    return initialGrades
+  })
   const [feedback, setFeedback] = useState('')
+
+  // Update manual grades if attempt changes (e.g., navigating between students)
+  useEffect(() => {
+    const existingGrades = attempt.manual_grades || {}
+    const loadedGrades = {}
+    
+    Object.entries(existingGrades).forEach(([questionId, gradeData]) => {
+      loadedGrades[questionId] = {
+        points: gradeData.points ?? '',
+        feedback: gradeData.feedback || ''
+      }
+    })
+    
+    setManualGrades(loadedGrades)
+  }, [attempt.id])
 
   const questions = quizConfig?.questions || []
   const studentAnswers = attempt.answers || {}

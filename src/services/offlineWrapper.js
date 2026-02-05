@@ -6,6 +6,18 @@
 import * as offlineDb from './offlineDb'
 
 /**
+ * Helper to add timeout to a promise
+ */
+function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(errorMessage)), ms)
+    )
+  ])
+}
+
+/**
  * Execute an API call with offline fallback
  * @param {Object} options - Configuration options
  * @param {Function} options.apiCall - The API function to call
@@ -25,15 +37,13 @@ export async function withOfflineSupport({
   // If online, try network first
   if (isOnline) {
     try {
-      const { data, error } = await apiCall()
+      const { data, error } = await withTimeout(apiCall(), 30000, 'Request timed out')
       
       if (!error && data && setCached) {
-        // Cache the fresh data
-        try {
-          await setCached(data)
-        } catch (cacheError) {
+        // Cache the fresh data (non-blocking, with timeout)
+        withTimeout(setCached(data), 5000).catch(cacheError => {
           console.warn('Failed to cache data:', cacheError)
-        }
+        })
       }
       
       return { data, error, isFromCache: false }
@@ -46,7 +56,7 @@ export async function withOfflineSupport({
   // Offline or network failed - try cache
   if (getCached) {
     try {
-      const cachedData = await getCached()
+      const cachedData = await withTimeout(getCached(), 5000, 'Cache read timed out')
       if (cachedData) {
         return { 
           data: cachedData, 

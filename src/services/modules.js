@@ -110,7 +110,13 @@ export async function addContent(moduleId, contentData) {
       evaluation_type: contentData.evaluationType || null,
       due_date: contentData.dueDate || null,
       total_points: contentData.totalPoints || null,
-      quiz_config: contentData.quizConfig || null
+      quiz_config: contentData.quizConfig || null,
+      // Assignment attachment fields (optional document/video for students)
+      attachment_type: contentData.attachmentType || null,
+      attachment_url: contentData.attachmentUrl || null,
+      attachment_file_name: contentData.attachmentFileName || null,
+      attachment_file_size: contentData.attachmentFileSize || null,
+      attachment_file_type: contentData.attachmentFileType || null
     })
     .select()
     .single()

@@ -9,6 +9,7 @@ import {
   getSubmissionSignedUrl
 } from '../../services/assignments'
 import { markContentComplete } from '../../services/progress'
+import { getSignedUrl } from '../../services/uploads'
 
 /**
  * AssignmentViewer - Student view for assignments
@@ -212,6 +213,14 @@ export default function AssignmentViewer({ content, progress, onProgressUpdate }
             </div>
           )}
         </div>
+
+        {/* Assignment Materials (Attached Document/Video) */}
+        {content.attachment_type && content.attachment_url && (
+          <AssignmentMaterials 
+            content={content} 
+            formatFileSize={formatFileSize}
+          />
+        )}
 
         {/* Due Date */}
         {dueDate && (
@@ -618,6 +627,176 @@ function SubmissionFileLink({ submissionData, formatFileSize }) {
       >
         {loading ? 'Loading...' : 'View'}
       </button>
+    </div>
+  )
+}
+
+/**
+ * AssignmentMaterials - Component to display attached documents/videos for students
+ */
+function AssignmentMaterials({ content, formatFileSize }) {
+  const [loading, setLoading] = useState(true)
+  const [signedUrl, setSignedUrl] = useState(null)
+  const [error, setError] = useState(null)
+
+  const isVideo = content.attachment_type === 'assignment_video'
+  const isDocument = content.attachment_type === 'assignment_document'
+  const isPdf = content.attachment_file_type === 'application/pdf'
+  const isImage = content.attachment_file_type?.startsWith('image/')
+
+  // Load signed URL on mount
+  useEffect(() => {
+    const loadSignedUrl = async () => {
+      try {
+        const { data, error: urlError } = await getSignedUrl(content.attachment_url, 3600)
+        if (urlError) {
+          console.error('Error generating signed URL:', urlError)
+          setError('Unable to load material')
+          return
+        }
+        setSignedUrl(data.signedUrl)
+      } catch (err) {
+        console.error('Error loading material:', err)
+        setError('Unable to load material')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadSignedUrl()
+  }, [content.attachment_url])
+
+  const handleDownload = () => {
+    if (!signedUrl) return
+    const link = document.createElement('a')
+    link.href = signedUrl
+    link.download = content.attachment_file_name || 'attachment'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleOpenInNewTab = () => {
+    if (signedUrl) {
+      window.open(signedUrl, '_blank')
+    }
+  }
+
+  return (
+    <div className="mb-4">
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{isVideo ? '🎥' : '📄'}</span>
+            <h3 className="font-semibold text-indigo-900">
+              {isVideo ? 'Watch Before Completing' : 'Read Before Completing'}
+            </h3>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleOpenInNewTab}
+              disabled={!signedUrl}
+              className="btn btn-secondary text-sm px-2 py-1.5 disabled:opacity-50"
+              title="Open in new tab"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={!signedUrl}
+              className="btn btn-secondary text-sm px-2 py-1.5 disabled:opacity-50"
+              title="Download"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-white rounded-lg p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+            <p className="text-gray-600 mt-3">Loading material...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-white rounded-lg p-6 text-center">
+            <div className="text-4xl mb-2">⚠️</div>
+            <p className="text-gray-600">{error}</p>
+          </div>
+        )}
+
+        {/* Video Player - shown by default */}
+        {!loading && !error && isVideo && signedUrl && (
+          <div className="mb-3 rounded-lg overflow-hidden bg-black">
+            <video
+              src={signedUrl}
+              controls
+              className="w-full max-h-[400px]"
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        )}
+
+        {/* PDF Viewer - shown by default */}
+        {!loading && !error && isPdf && signedUrl && (
+          <div className="mb-3 bg-white rounded-lg border overflow-hidden">
+            <iframe
+              src={signedUrl}
+              className="w-full h-[400px]"
+              title="Document Preview"
+            />
+          </div>
+        )}
+
+        {/* Image Preview - shown by default */}
+        {!loading && !error && isImage && signedUrl && (
+          <div className="mb-3 bg-white rounded-lg border overflow-hidden p-4">
+            <img
+              src={signedUrl}
+              alt={content.attachment_file_name || 'Attachment'}
+              className="max-w-full max-h-[400px] mx-auto"
+            />
+          </div>
+        )}
+
+        {/* Non-previewable document message */}
+        {!loading && !error && isDocument && !isPdf && !isImage && signedUrl && (
+          <div className="mb-3 bg-white rounded-lg border p-6 text-center">
+            <div className="text-4xl mb-2">📄</div>
+            <p className="text-gray-700 font-medium">{content.attachment_file_name}</p>
+            <p className="text-gray-500 text-sm mt-1">
+              Use the buttons above to open or download this document.
+            </p>
+          </div>
+        )}
+
+        {/* File Info */}
+        {!loading && !error && (
+          <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
+            <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <span className="text-lg">{isVideo ? '🎬' : '📋'}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-gray-900 truncate text-sm">
+                {content.attachment_file_name || (isVideo ? 'Video Material' : 'Document')}
+              </p>
+              {content.attachment_file_size && (
+                <p className="text-xs text-gray-500">
+                  {formatFileSize(content.attachment_file_size)}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

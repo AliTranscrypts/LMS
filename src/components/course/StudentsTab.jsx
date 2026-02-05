@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getCourseEnrollments, findStudentByStudentId, enrollStudent, unenrollStudent } from '../../services/enrollments'
+import { getTerms, createTerm } from '../../services/terms'
 import Modal from '../common/Modal'
 import EmptyState from '../common/EmptyState'
 
@@ -8,14 +9,26 @@ export default function StudentsTab({ course, onUpdate }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showEnrollModal, setShowEnrollModal] = useState(false)
+  const [terms, setTerms] = useState([])
+  const [selectedTermFilter, setSelectedTermFilter] = useState('') // '' = all, 'none' = no term, or termId
+
+  useEffect(() => {
+    fetchTerms()
+  }, [])
 
   useEffect(() => {
     fetchEnrollments()
-  }, [course.id])
+  }, [course.id, selectedTermFilter])
+
+  const fetchTerms = async () => {
+    const { data } = await getTerms()
+    setTerms(data || [])
+  }
 
   const fetchEnrollments = async () => {
     setLoading(true)
-    const { data, error } = await getCourseEnrollments(course.id)
+    const termFilter = selectedTermFilter || null
+    const { data, error } = await getCourseEnrollments(course.id, termFilter)
     
     if (error) {
       setError('Failed to load students')
@@ -29,6 +42,7 @@ export default function StudentsTab({ course, onUpdate }) {
   const handleEnrollSuccess = () => {
     setShowEnrollModal(false)
     fetchEnrollments()
+    fetchTerms() // Refresh terms in case a new one was created
     if (onUpdate) onUpdate()
   }
 
@@ -56,7 +70,24 @@ export default function StudentsTab({ course, onUpdate }) {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Enrolled Students</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-semibold text-gray-900">Enrolled Students</h2>
+          {terms.length > 0 && (
+            <select
+              value={selectedTermFilter}
+              onChange={(e) => setSelectedTermFilter(e.target.value)}
+              className="input py-1.5 text-sm w-auto"
+            >
+              <option value="">All Terms</option>
+              <option value="none">No Term</option>
+              {terms.map((term) => (
+                <option key={term.id} value={term.id}>
+                  {term.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <button
           onClick={() => setShowEnrollModal(true)}
           className="btn btn-primary"
@@ -97,6 +128,9 @@ export default function StudentsTab({ course, onUpdate }) {
                   Student ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Term
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Enrolled Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -124,6 +158,15 @@ export default function StudentsTab({ course, onUpdate }) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {enrollment.student?.student_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {enrollment.term ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                        {enrollment.term.name}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {new Date(enrollment.enrolled_at).toLocaleDateString()}
@@ -159,17 +202,23 @@ export default function StudentsTab({ course, onUpdate }) {
         courseId={course.id}
         courseName={course.name}
         onSuccess={handleEnrollSuccess}
+        terms={terms}
+        onTermCreated={fetchTerms}
       />
     </div>
   )
 }
 
-function EnrollStudentModal({ isOpen, onClose, courseId, courseName, onSuccess }) {
+function EnrollStudentModal({ isOpen, onClose, courseId, courseName, onSuccess, terms = [], onTermCreated }) {
   const [studentIdInput, setStudentIdInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [foundStudent, setFoundStudent] = useState(null)
   const [showConfirmation, setShowConfirmation] = useState(false)
+  const [selectedTermId, setSelectedTermId] = useState('')
+  const [showNewTermInput, setShowNewTermInput] = useState(false)
+  const [newTermName, setNewTermName] = useState('')
+  const [creatingTerm, setCreatingTerm] = useState(false)
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -193,15 +242,42 @@ function EnrollStudentModal({ isOpen, onClose, courseId, courseName, onSuccess }
     setLoading(false)
   }
 
+  const handleCreateTerm = async () => {
+    if (!newTermName.trim()) {
+      setError('Please enter a term name')
+      return
+    }
+
+    setCreatingTerm(true)
+    setError('')
+    
+    const { data, error } = await createTerm(newTermName.trim())
+    
+    if (error) {
+      if (error.code === '23505') {
+        setError('A term with this name already exists')
+      } else {
+        setError(error.message || 'Failed to create term')
+      }
+    } else {
+      setSelectedTermId(data.id)
+      setNewTermName('')
+      setShowNewTermInput(false)
+      if (onTermCreated) onTermCreated()
+    }
+    setCreatingTerm(false)
+  }
+
   const handleEnroll = async () => {
     if (!foundStudent) return
 
     setLoading(true)
-    const { data, error } = await enrollStudent(courseId, foundStudent.id)
+    const termId = selectedTermId || null
+    const { data, error } = await enrollStudent(courseId, foundStudent.id, termId)
     
     if (error) {
       if (error.code === '23505') {
-        setError('This student is already enrolled in the course.')
+        setError('This student is already enrolled in this course for the selected term.')
       } else {
         setError(error.message || 'Failed to enroll student')
       }
@@ -218,7 +294,16 @@ function EnrollStudentModal({ isOpen, onClose, courseId, courseName, onSuccess }
     setError('')
     setFoundStudent(null)
     setShowConfirmation(false)
+    setSelectedTermId('')
+    setShowNewTermInput(false)
+    setNewTermName('')
     onClose()
+  }
+
+  const getSelectedTermName = () => {
+    if (!selectedTermId) return null
+    const term = terms.find(t => t.id === selectedTermId)
+    return term?.name
   }
 
   if (!isOpen) return null
@@ -237,7 +322,11 @@ function EnrollStudentModal({ isOpen, onClose, courseId, courseName, onSuccess }
               Enroll {foundStudent.full_name}?
             </h3>
             <p className="text-gray-600">
-              Add this student to <span className="font-medium">{courseName}</span>?
+              Add this student to <span className="font-medium">{courseName}</span>
+              {getSelectedTermName() && (
+                <span> for <span className="font-medium">{getSelectedTermName()}</span></span>
+              )}
+              ?
             </p>
           </div>
 
@@ -282,6 +371,76 @@ function EnrollStudentModal({ isOpen, onClose, courseId, courseName, onSuccess }
             />
             <p className="mt-1 text-xs text-gray-500">
               Students can find their ID on their dashboard
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="term" className="label">Term (Optional)</label>
+            {showNewTermInput ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTermName}
+                  onChange={(e) => setNewTermName(e.target.value)}
+                  className="input flex-1"
+                  placeholder="e.g., Fall 2025"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleCreateTerm()
+                    }
+                    if (e.key === 'Escape') {
+                      setShowNewTermInput(false)
+                      setNewTermName('')
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateTerm}
+                  disabled={creatingTerm}
+                  className="btn btn-primary disabled:opacity-50"
+                >
+                  {creatingTerm ? '...' : 'Add'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewTermInput(false)
+                    setNewTermName('')
+                  }}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <select
+                  id="term"
+                  value={selectedTermId}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') {
+                      setShowNewTermInput(true)
+                      setSelectedTermId('')
+                    } else {
+                      setSelectedTermId(e.target.value)
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="">No term selected</option>
+                  {terms.map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.name}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Create new term...</option>
+                </select>
+              </div>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              Assign this student to a specific term for roster management
             </p>
           </div>
 

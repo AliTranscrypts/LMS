@@ -27,7 +27,16 @@ const QuillEditor = forwardRef(function QuillEditor({
   }))
 
   useEffect(() => {
-    if (!editorRef.current || quillRef.current) return
+    if (!editorRef.current) return
+    
+    // Prevent double initialization (React StrictMode)
+    if (quillRef.current) return
+
+    // Clean up any existing toolbar from a previous mount
+    const existingToolbar = containerRef.current?.querySelector('.ql-toolbar')
+    if (existingToolbar) {
+      existingToolbar.remove()
+    }
 
     // Quill toolbar options with advanced formatting
     const toolbarOptions = [
@@ -74,10 +83,18 @@ const QuillEditor = forwardRef(function QuillEditor({
     setIsInitialized(true)
 
     return () => {
-      // Cleanup
+      // Proper cleanup - remove toolbar and reset
+      if (containerRef.current) {
+        const toolbar = containerRef.current.querySelector('.ql-toolbar')
+        if (toolbar) {
+          toolbar.remove()
+        }
+      }
       if (quillRef.current) {
+        quillRef.current.off('text-change')
         quillRef.current = null
       }
+      setIsInitialized(false)
     }
   }, [])
 
@@ -171,9 +188,19 @@ export default QuillEditor
 export function QuillRenderer({ content, className = '' }) {
   const containerRef = useRef(null)
   const quillRef = useRef(null)
+  const wrapperRef = useRef(null)
 
   useEffect(() => {
-    if (!containerRef.current || quillRef.current) return
+    if (!containerRef.current) return
+    
+    // Prevent double initialization (React StrictMode)
+    if (quillRef.current) return
+
+    // Clean up any existing toolbar from a previous mount
+    const existingToolbar = wrapperRef.current?.querySelector('.ql-toolbar')
+    if (existingToolbar) {
+      existingToolbar.remove()
+    }
 
     const quill = new Quill(containerRef.current, {
       theme: 'snow',
@@ -194,6 +221,13 @@ export function QuillRenderer({ content, className = '' }) {
     }
 
     return () => {
+      // Proper cleanup
+      if (wrapperRef.current) {
+        const toolbar = wrapperRef.current.querySelector('.ql-toolbar')
+        if (toolbar) {
+          toolbar.remove()
+        }
+      }
       quillRef.current = null
     }
   }, [])
@@ -212,7 +246,7 @@ export function QuillRenderer({ content, className = '' }) {
   }, [content])
 
   return (
-    <div className={`quill-renderer ${className}`}>
+    <div className={`quill-renderer ${className}`} ref={wrapperRef}>
       <div ref={containerRef} />
       <style>{`
         .quill-renderer .ql-container {
