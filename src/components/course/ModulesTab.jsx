@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { getCourseModules } from '../../services/courses'
 import { createModule, updateModule, deleteModule, reorderModules, addContent, deleteContent, reorderContent } from '../../services/modules'
 import { getStudentCourseProgress } from '../../services/progress'
+import { ensureValidSession } from '../../services/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import EmptyState from '../common/EmptyState'
 import Modal from '../common/Modal'
@@ -21,10 +22,12 @@ export default function ModulesTab({ course, isTeacher, onUpdate }) {
   
   // Module actions state
   const [isAddingModule, setIsAddingModule] = useState(false)
+  const [isCreatingModule, setIsCreatingModule] = useState(false)
   const [newModuleName, setNewModuleName] = useState('')
   const [editingModuleId, setEditingModuleId] = useState(null)
   const [editingModuleName, setEditingModuleName] = useState('')
   const [deletingModule, setDeletingModule] = useState(null)
+  const [actionError, setActionError] = useState(null)
   
   // Content actions state
   const [showContentTypeSelector, setShowContentTypeSelector] = useState(false)
@@ -88,19 +91,46 @@ export default function ModulesTab({ course, isTeacher, onUpdate }) {
   // Handle adding a new module
   const handleAddModule = async () => {
     if (!newModuleName.trim()) return
+    
+    // Clear any previous error
+    setActionError(null)
+    setIsCreatingModule(true)
 
-    const orderIndex = modules.length
-    const { data, error } = await createModule(course.id, newModuleName.trim(), orderIndex)
-    
-    if (error) {
-      console.error('Failed to create module:', error)
-    } else {
-      setModules(prev => [...prev, { ...data, content: [] }])
-      setExpandedModules(prev => ({ ...prev, [data.id]: true }))
+    try {
+      // Ensure we have a valid session before making the API call
+      const { valid, error: sessionError } = await ensureValidSession()
+      if (!valid) {
+        console.error('Session validation failed:', sessionError)
+        setActionError('Your session has expired. Please refresh the page and try again.')
+        setIsCreatingModule(false)
+        return
+      }
+
+      const orderIndex = modules.length
+      const { data, error } = await createModule(course.id, newModuleName.trim(), orderIndex)
+      
+      if (error) {
+        console.error('Failed to create module:', error)
+        // Check for auth-related errors
+        if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301') {
+          setActionError('Authentication error. Please refresh the page and try again.')
+        } else if (error.message?.includes('permission') || error.message?.includes('policy')) {
+          setActionError('You do not have permission to add modules to this course.')
+        } else {
+          setActionError(error.message || 'Failed to create module. Please try again.')
+        }
+      } else {
+        setModules(prev => [...prev, { ...data, content: [] }])
+        setExpandedModules(prev => ({ ...prev, [data.id]: true }))
+        setIsAddingModule(false)
+        setNewModuleName('')
+      }
+    } catch (err) {
+      console.error('Unexpected error creating module:', err)
+      setActionError('An unexpected error occurred. Please try again.')
+    } finally {
+      setIsCreatingModule(false)
     }
-    
-    setIsAddingModule(false)
-    setNewModuleName('')
   }
 
   // Handle editing a module name
@@ -277,6 +307,26 @@ export default function ModulesTab({ course, isTeacher, onUpdate }) {
         )}
       </div>
 
+      {/* Error Alert */}
+      {actionError && (
+        <div className="mb-4 p-4 bg-error-50 border border-error-200 rounded-lg flex items-start gap-3">
+          <svg className="w-5 h-5 text-error-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm text-error-700">{actionError}</p>
+          </div>
+          <button 
+            onClick={() => setActionError(null)}
+            className="text-error-600 hover:text-error-800"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Inline Add Module */}
       {isAddingModule && (
         <div className="card p-4 mb-4 border-2 border-primary-200 bg-primary-50">
@@ -286,25 +336,41 @@ export default function ModulesTab({ course, isTeacher, onUpdate }) {
               value={newModuleName}
               onChange={(e) => setNewModuleName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddModule()
-                if (e.key === 'Escape') {
+                if (e.key === 'Enter' && !isCreatingModule) handleAddModule()
+                if (e.key === 'Escape' && !isCreatingModule) {
                   setIsAddingModule(false)
                   setNewModuleName('')
+                  setActionError(null)
                 }
               }}
               className="input flex-1"
               placeholder="Enter module name (e.g., Unit 1: Introduction)"
               autoFocus
+              disabled={isCreatingModule}
             />
-            <button onClick={handleAddModule} className="btn btn-primary">
-              Add
+            <button 
+              onClick={handleAddModule} 
+              className="btn btn-primary"
+              disabled={isCreatingModule || !newModuleName.trim()}
+            >
+              {isCreatingModule ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Adding...
+                </span>
+              ) : 'Add'}
             </button>
             <button 
               onClick={() => {
                 setIsAddingModule(false)
                 setNewModuleName('')
+                setActionError(null)
               }}
               className="btn btn-secondary"
+              disabled={isCreatingModule}
             >
               Cancel
             </button>
