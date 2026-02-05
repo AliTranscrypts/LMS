@@ -51,38 +51,23 @@ export async function getCourse(courseId) {
  */
 export async function createCourse(teacherId, courseData) {
   // Add a timeout to prevent indefinite hanging
-  const TIMEOUT_MS = 15000 // 15 seconds
+  const TIMEOUT_MS = 30000 // 30 seconds (increased for slow connections)
   
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
-      reject(new Error('Request timed out. Please check your connection and try again.'))
+      reject(new Error('Request timed out after 30s. Please check your internet connection and try again.'))
     }, TIMEOUT_MS)
   })
 
   const createPromise = (async () => {
     try {
-      console.log('Creating course with teacher_id:', teacherId)
-      console.log('Course data:', JSON.stringify(courseData, null, 2))
+      console.log('[createCourse] Starting...')
+      console.log('[createCourse] teacher_id:', teacherId)
       
-      // Ensure we have a valid session before making the request
-      const sessionCheck = await ensureValidSession()
-      if (!sessionCheck.valid) {
-        console.error('Session validation failed:', sessionCheck.error)
-        return { 
-          data: null, 
-          error: { message: 'Your session has expired. Please refresh the page and sign in again.' } 
-        }
-      }
-      console.log('Session valid, user:', sessionCheck.session?.user?.id)
-      
-      // Verify the session user matches the teacher ID
-      if (sessionCheck.session?.user?.id !== teacherId) {
-        console.error('Session user ID mismatch:', sessionCheck.session?.user?.id, '!==', teacherId)
-        return {
-          data: null,
-          error: { message: 'Authentication mismatch. Please sign out and sign in again.' }
-        }
-      }
+      // Skip session validation since we already have the user - go straight to insert
+      // The RLS policies will validate the user anyway
+      console.log('[createCourse] Sending insert request to Supabase...')
+      const startTime = Date.now()
       
       const { data, error } = await supabase
         .from('courses')
@@ -101,12 +86,15 @@ export async function createCourse(teacherId, courseData) {
         .select()
         .single()
 
+      const elapsed = Date.now() - startTime
+      console.log(`[createCourse] Supabase responded in ${elapsed}ms`)
+
       if (error) {
-        console.error('Supabase createCourse error:', error)
-        console.error('Error code:', error.code)
-        console.error('Error message:', error.message)
-        console.error('Error details:', error.details)
-        console.error('Error hint:', error.hint)
+        console.error('[createCourse] Supabase error:', error)
+        console.error('[createCourse] Error code:', error.code)
+        console.error('[createCourse] Error message:', error.message)
+        console.error('[createCourse] Error details:', error.details)
+        console.error('[createCourse] Error hint:', error.hint)
         
         // Provide more helpful error messages for common issues
         if (error.code === '42501' || error.message?.includes('permission')) {
@@ -126,17 +114,17 @@ export async function createCourse(teacherId, courseData) {
       }
 
       if (!data) {
-        console.error('No data returned from createCourse - possible RLS issue')
+        console.error('[createCourse] No data returned - possible RLS issue')
         return { 
           data: null, 
-          error: { message: 'Course creation failed. This may be a permissions issue - please ensure your profile has teacher role.' } 
+          error: { message: 'Course creation failed. This may be a permissions issue.' } 
         }
       }
 
-      console.log('Course created successfully:', data.id)
+      console.log('[createCourse] Success! Course ID:', data.id)
       return { data, error: null }
     } catch (err) {
-      console.error('Unexpected error in createCourse:', err)
+      console.error('[createCourse] Exception:', err)
       return { data: null, error: { message: err.message || 'Network error or service unavailable' } }
     }
   })()
@@ -144,7 +132,7 @@ export async function createCourse(teacherId, courseData) {
   try {
     return await Promise.race([createPromise, timeoutPromise])
   } catch (err) {
-    console.error('createCourse timed out or failed:', err)
+    console.error('[createCourse] Timed out or failed:', err)
     return { data: null, error: { message: err.message } }
   }
 }

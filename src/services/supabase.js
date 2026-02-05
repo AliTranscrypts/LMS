@@ -58,4 +58,57 @@ export async function ensureValidSession() {
   return { valid: true, session }
 }
 
+// Diagnostic function to test Supabase connectivity
+export async function testSupabaseConnection() {
+  console.log('[Supabase Health Check] Starting...')
+  console.log('[Supabase Health Check] URL:', supabaseUrl?.substring(0, 30) + '...')
+  
+  const results = {
+    auth: null,
+    database: null,
+    timestamp: new Date().toISOString()
+  }
+  
+  // Test 1: Auth service
+  try {
+    const startAuth = Date.now()
+    const { data, error } = await supabase.auth.getSession()
+    results.auth = {
+      success: !error,
+      timeMs: Date.now() - startAuth,
+      hasSession: !!data?.session,
+      error: error?.message
+    }
+    console.log('[Supabase Health Check] Auth:', results.auth)
+  } catch (e) {
+    results.auth = { success: false, error: e.message }
+    console.error('[Supabase Health Check] Auth failed:', e)
+  }
+  
+  // Test 2: Database query (simple count on profiles)
+  try {
+    const startDb = Date.now()
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+    results.database = {
+      success: !error,
+      timeMs: Date.now() - startDb,
+      error: error?.message
+    }
+    console.log('[Supabase Health Check] Database:', results.database)
+  } catch (e) {
+    results.database = { success: false, error: e.message }
+    console.error('[Supabase Health Check] Database failed:', e)
+  }
+  
+  console.log('[Supabase Health Check] Complete:', results)
+  return results
+}
+
+// Expose for debugging in console
+if (typeof window !== 'undefined') {
+  window.testSupabaseConnection = testSupabaseConnection
+}
+
 export default supabase
