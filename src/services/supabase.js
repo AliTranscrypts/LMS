@@ -109,6 +109,15 @@ export async function testSupabaseConnection() {
 // Expose for debugging in console
 if (typeof window !== 'undefined') {
   window.testSupabaseConnection = testSupabaseConnection
+  window.supabase = supabase
+  window.debugLMS = {
+    supabase,
+    testConnection: testSupabaseConnection,
+    getEnv: () => ({
+      url: import.meta.env.VITE_SUPABASE_URL,
+      hasKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY
+    })
+  }
 }
 
 export default supabase

@@ -34,6 +34,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         // Increase the maximum file size that can be precached (default is 2MB)
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+        // IMPORTANT: Don't let service worker handle Supabase API POST/PUT/DELETE requests
+        // This was causing timeouts on mutations
+        navigateFallbackDenylist: [/^\/api/],
         runtimeCaching: [
           {
             // Cache-First for static assets (images, fonts, etc.)
@@ -48,12 +51,26 @@ export default defineConfig({
             }
           },
           {
-            // Network-First for API calls with offline fallback
-            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/,
+            // Network-Only for Supabase API mutations (POST, PATCH, DELETE)
+            // These should NEVER be cached or intercepted
+            urlPattern: ({ url, request }) => {
+              return url.hostname.includes('supabase.co') && 
+                     url.pathname.includes('/rest/v1/') &&
+                     request.method !== 'GET'
+            },
+            handler: 'NetworkOnly'
+          },
+          {
+            // Network-First for API GET calls with offline fallback
+            urlPattern: ({ url, request }) => {
+              return url.hostname.includes('supabase.co') && 
+                     url.pathname.includes('/rest/v1/') &&
+                     request.method === 'GET'
+            },
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
+              networkTimeoutSeconds: 30, // Increased timeout
               expiration: {
                 maxEntries: 200,
                 maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
@@ -69,7 +86,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'storage-cache',
-              networkTimeoutSeconds: 15,
+              networkTimeoutSeconds: 30, // Increased timeout
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 60 * 60 * 24 * 14 // 14 days
@@ -78,6 +95,11 @@ export default defineConfig({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            // Network-Only for Supabase auth endpoints
+            urlPattern: /^https:\/\/.*\.supabase\.co\/auth\/.*/,
+            handler: 'NetworkOnly'
           }
         ],
         // Skip waiting and claim clients immediately
