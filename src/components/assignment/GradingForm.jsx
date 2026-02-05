@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { saveGrade } from '../../services/assignments'
+import { saveGrade, getSubmissionSignedUrl } from '../../services/assignments'
 
 /**
  * GradingForm - Form for teachers to grade a student's assignment
@@ -221,30 +221,11 @@ export default function GradingForm({
             </div>
 
             {/* File Submission */}
-            {selectedSubmission.submission_data?.file_url && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">📎</span>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {selectedSubmission.submission_data.file_name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {formatFileSize(selectedSubmission.submission_data.file_size)}
-                      </p>
-                    </div>
-                  </div>
-                  <a
-                    href={selectedSubmission.submission_data.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary text-sm"
-                  >
-                    Download
-                  </a>
-                </div>
-              </div>
+            {(selectedSubmission.submission_data?.file_path || selectedSubmission.submission_data?.file_url) && (
+              <SubmissionFileDownload 
+                submissionData={selectedSubmission.submission_data}
+                formatFileSize={formatFileSize}
+              />
             )}
 
             {/* Text Submission */}
@@ -392,6 +373,78 @@ export default function GradingForm({
             </p>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * SubmissionFileDownload - Component to download submission files with signed URLs
+ */
+function SubmissionFileDownload({ submissionData, formatFileSize }) {
+  const [loading, setLoading] = useState(false)
+
+  const handleDownload = async () => {
+    setLoading(true)
+    try {
+      let storagePath = submissionData.file_path
+      
+      // If no file_path but has file_url (legacy), extract path from URL
+      if (!storagePath && submissionData.file_url) {
+        if (submissionData.file_url.startsWith('http')) {
+          const match = submissionData.file_url.match(/\/storage\/v1\/object\/public\/course-content\/(.+)$/)
+          if (match) {
+            storagePath = match[1]
+          } else {
+            // Can't extract path, try legacy URL directly
+            window.open(submissionData.file_url, '_blank')
+            setLoading(false)
+            return
+          }
+        } else {
+          storagePath = submissionData.file_url
+        }
+      }
+
+      if (storagePath) {
+        // Generate signed URL for private bucket
+        const { data, error } = await getSubmissionSignedUrl(storagePath, 3600)
+        if (error) {
+          console.error('Error generating signed URL:', error)
+          alert('Unable to download file. Please try again.')
+          return
+        }
+        window.open(data.signedUrl, '_blank')
+      }
+    } catch (err) {
+      console.error('Error downloading file:', err)
+      alert('Unable to download file. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">📎</span>
+          <div>
+            <p className="font-medium text-gray-900">
+              {submissionData.file_name}
+            </p>
+            <p className="text-sm text-gray-500">
+              {formatFileSize(submissionData.file_size)}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleDownload}
+          disabled={loading}
+          className="btn btn-primary text-sm disabled:opacity-50"
+        >
+          {loading ? 'Loading...' : 'Download'}
+        </button>
       </div>
     </div>
   )

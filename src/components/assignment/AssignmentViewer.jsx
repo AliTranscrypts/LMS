@@ -5,7 +5,8 @@ import {
   getStudentSubmissions,
   getStudentGrade,
   createSubmission,
-  uploadSubmissionFile 
+  uploadSubmissionFile,
+  getSubmissionSignedUrl
 } from '../../services/assignments'
 import { markContentComplete } from '../../services/progress'
 
@@ -114,9 +115,9 @@ export default function AssignmentViewer({ content, progress, onProgressUpdate }
         
         if (uploadError) throw uploadError
         
+        // Store path only - signed URLs generated on-demand for viewing
         submissionData = {
           type: 'file',
-          file_url: fileData.url,
           file_path: fileData.path,
           file_name: fileData.fileName,
           file_size: fileData.fileSize,
@@ -353,26 +354,11 @@ export default function AssignmentViewer({ content, progress, onProgressUpdate }
               </div>
 
               {/* Show submission content */}
-              {latestSubmission.submission_data?.file_url && (
-                <div className="mt-3 flex items-center gap-2 p-2 bg-white rounded border">
-                  <span className="text-2xl">📎</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">
-                      {latestSubmission.submission_data.file_name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(latestSubmission.submission_data.file_size)}
-                    </p>
-                  </div>
-                  <a
-                    href={latestSubmission.submission_data.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                  >
-                    View
-                  </a>
-                </div>
+              {(latestSubmission.submission_data?.file_path || latestSubmission.submission_data?.file_url) && (
+                <SubmissionFileLink 
+                  submissionData={latestSubmission.submission_data}
+                  formatFileSize={formatFileSize}
+                />
               )}
 
               {latestSubmission.submission_data?.text_content && (
@@ -564,6 +550,74 @@ export default function AssignmentViewer({ content, progress, onProgressUpdate }
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * SubmissionFileLink - Component to view submission files with signed URLs
+ */
+function SubmissionFileLink({ submissionData, formatFileSize }) {
+  const [loading, setLoading] = useState(false)
+
+  const handleViewFile = async () => {
+    setLoading(true)
+    try {
+      let storagePath = submissionData.file_path
+      
+      // If no file_path but has file_url (legacy), extract path from URL
+      if (!storagePath && submissionData.file_url) {
+        if (submissionData.file_url.startsWith('http')) {
+          const match = submissionData.file_url.match(/\/storage\/v1\/object\/public\/course-content\/(.+)$/)
+          if (match) {
+            storagePath = match[1]
+          } else {
+            // Can't extract path, try legacy URL directly
+            window.open(submissionData.file_url, '_blank')
+            setLoading(false)
+            return
+          }
+        } else {
+          storagePath = submissionData.file_url
+        }
+      }
+
+      if (storagePath) {
+        // Generate signed URL for private bucket
+        const { data, error } = await getSubmissionSignedUrl(storagePath, 3600)
+        if (error) {
+          console.error('Error generating signed URL:', error)
+          alert('Unable to view file. Please try again.')
+          return
+        }
+        window.open(data.signedUrl, '_blank')
+      }
+    } catch (err) {
+      console.error('Error viewing file:', err)
+      alert('Unable to view file. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2 p-2 bg-white rounded border">
+      <span className="text-2xl">📎</span>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-gray-900 truncate">
+          {submissionData.file_name}
+        </p>
+        <p className="text-xs text-gray-500">
+          {formatFileSize(submissionData.file_size)}
+        </p>
+      </div>
+      <button
+        onClick={handleViewFile}
+        disabled={loading}
+        className="text-primary-600 hover:text-primary-700 text-sm font-medium disabled:opacity-50"
+      >
+        {loading ? 'Loading...' : 'View'}
+      </button>
     </div>
   )
 }

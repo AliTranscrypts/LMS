@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../services/supabase'
 import { markContentComplete, markContentIncomplete } from '../services/progress'
+import { getSignedUrl } from '../services/uploads'
 import Layout from '../components/common/Layout'
 import PdfViewer from '../components/content/PdfViewer'
 import VideoPlayer from '../components/content/VideoPlayer'
@@ -21,6 +22,8 @@ export default function ContentViewer() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [marking, setMarking] = useState(false)
+  const [signedFileUrl, setSignedFileUrl] = useState(null)
+  const [fileUrlLoading, setFileUrlLoading] = useState(false)
 
   // Navigation state
   const [prevContent, setPrevContent] = useState(null)
@@ -33,6 +36,53 @@ export default function ContentViewer() {
   useEffect(() => {
     fetchContent()
   }, [contentId, user?.id])
+
+  // Generate signed URL for file content (PDFs, videos)
+  useEffect(() => {
+    const generateSignedUrl = async () => {
+      if (!content?.file_url) {
+        setSignedFileUrl(null)
+        return
+      }
+
+      setFileUrlLoading(true)
+      try {
+        let storagePath = content.file_url
+
+        // Check if file_url is a full URL (legacy data) - extract the path
+        if (content.file_url.startsWith('http')) {
+          // Legacy URL format: https://xxx.supabase.co/storage/v1/object/public/course-content/path/to/file
+          // Extract path after /course-content/
+          const match = content.file_url.match(/\/storage\/v1\/object\/public\/course-content\/(.+)$/)
+          if (match) {
+            storagePath = match[1]
+          } else {
+            // Can't extract path, try using as-is (will likely fail for private bucket)
+            console.warn('Could not extract storage path from legacy URL:', content.file_url)
+            setSignedFileUrl(content.file_url)
+            setFileUrlLoading(false)
+            return
+          }
+        }
+
+        // Generate signed URL for storage path
+        const { data, error } = await getSignedUrl(storagePath, 3600) // 1 hour expiry
+        if (error) {
+          console.error('Error generating signed URL:', error)
+          setSignedFileUrl(null)
+        } else {
+          setSignedFileUrl(data.signedUrl)
+        }
+      } catch (err) {
+        console.error('Error generating signed URL:', err)
+        setSignedFileUrl(null)
+      } finally {
+        setFileUrlLoading(false)
+      }
+    }
+
+    generateSignedUrl()
+  }, [content?.file_url])
 
   const fetchContent = async () => {
     setLoading(true)
@@ -246,21 +296,45 @@ export default function ContentViewer() {
         {/* Content Viewer */}
         <div className="mb-8">
           {content?.type === 'reading' && content?.file_url && (
-            <PdfViewer 
-              url={content.file_url} 
-              title={content.name}
-              allowDownload={true}
-            />
+            fileUrlLoading ? (
+              <div className="bg-gray-100 rounded-lg p-12 text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="text-gray-600 mt-4">Loading document...</p>
+              </div>
+            ) : signedFileUrl ? (
+              <PdfViewer 
+                url={signedFileUrl} 
+                title={content.name}
+                allowDownload={true}
+              />
+            ) : (
+              <div className="bg-error-50 rounded-lg p-12 text-center">
+                <div className="text-5xl mb-4">⚠️</div>
+                <p className="text-error-600">Unable to load document. Please try refreshing the page.</p>
+              </div>
+            )
           )}
 
           {content?.type === 'video' && content?.file_url && (
-            <VideoPlayer
-              url={content.file_url}
-              title={content.name}
-              onEnded={() => {
-                // Auto-mark complete when video ends (optional)
-              }}
-            />
+            fileUrlLoading ? (
+              <div className="bg-gray-100 rounded-lg p-12 text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="text-gray-600 mt-4">Loading video...</p>
+              </div>
+            ) : signedFileUrl ? (
+              <VideoPlayer
+                url={signedFileUrl}
+                title={content.name}
+                onEnded={() => {
+                  // Auto-mark complete when video ends (optional)
+                }}
+              />
+            ) : (
+              <div className="bg-error-50 rounded-lg p-12 text-center">
+                <div className="text-5xl mb-4">⚠️</div>
+                <p className="text-error-600">Unable to load video. Please try refreshing the page.</p>
+              </div>
+            )
           )}
 
           {!content?.file_url && (content?.type === 'reading' || content?.type === 'video') && (

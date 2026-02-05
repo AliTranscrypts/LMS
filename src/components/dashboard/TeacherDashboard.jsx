@@ -54,16 +54,28 @@ export default function TeacherDashboard() {
   }, [user?.id])
 
   const handleCreateCourse = async (courseData) => {
-    const { data, error } = await createCourse(user.id, courseData)
-    
-    if (error) {
-      return { error: error.message || 'Failed to create course' }
+    try {
+      const { data, error } = await createCourse(user.id, courseData)
+      
+      if (error) {
+        console.error('Course creation error:', error)
+        return { error: error.message || 'Failed to create course' }
+      }
+      
+      // Check if data was returned (RLS might silently deny)
+      if (!data || !data.id) {
+        console.error('Course creation returned no data')
+        return { error: 'Failed to create course. Please check your permissions.' }
+      }
+      
+      setShowCreateModal(false)
+      // Navigate to the modules tab of the new course (as per spec)
+      navigate(`/courses/${data.id}`)
+      return { error: null }
+    } catch (err) {
+      console.error('Unexpected error creating course:', err)
+      return { error: 'An unexpected error occurred. Please try again.' }
     }
-    
-    setShowCreateModal(false)
-    // Navigate to the modules tab of the new course (as per spec)
-    navigate(`/courses/${data.id}`)
-    return { error: null }
   }
 
   return (
@@ -290,17 +302,23 @@ function CreateCourseModal({ isOpen, onClose, onSubmit }) {
     }
 
     setLoading(true)
-    const result = await onSubmit({
-      name: name.trim(),
-      description: description.trim() || null,
-      syllabus,
-      categoryWeights: weights
-    })
+    try {
+      const result = await onSubmit({
+        name: name.trim(),
+        description: description.trim() || null,
+        syllabus,
+        categoryWeights: weights
+      })
 
-    if (result?.error) {
-      setError(result.error)
+      if (result?.error) {
+        setError(result.error)
+      }
+    } catch (err) {
+      console.error('Error in handleSubmit:', err)
+      setError('An unexpected error occurred. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleWeightChange = (category, value) => {

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import Plyr from 'plyr'
-import 'plyr/dist/plyr.css'
+// Note: plyr.css is imported globally in index.css to ensure proper CSS cascade with Tailwind
 
 /**
  * VideoPlayer - Video player using Plyr with custom controls
+ * Falls back to native HTML5 controls if Plyr fails to load
  * 
  * @param {Object} props
  * @param {string} props.url - URL of the video file
@@ -28,76 +28,99 @@ export default function VideoPlayer({
   const videoRef = useRef(null)
   const playerRef = useRef(null)
   const [error, setError] = useState(false)
+  const [plyrLoaded, setPlyrLoaded] = useState(false)
+  const [useFallback, setUseFallback] = useState(false)
 
   useEffect(() => {
-    if (!videoRef.current) return
+    if (!videoRef.current || useFallback) return
 
-    // Initialize Plyr
-    const player = new Plyr(videoRef.current, {
-      controls: [
-        'play-large',
-        'rewind',
-        'play',
-        'fast-forward',
-        'progress',
-        'current-time',
-        'duration',
-        'mute',
-        'volume',
-        'captions',
-        'settings',
-        'pip',
-        'airplay',
-        'fullscreen'
-      ],
-      settings: ['captions', 'quality', 'speed'],
-      speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
-      keyboard: { focused: true, global: false },
-      tooltips: { controls: true, seek: true },
-      captions: { active: false, language: 'auto', update: true },
-      fullscreen: { enabled: true, fallback: true, iosNative: true },
-      ratio: '16:9',
-      blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
-      storage: { enabled: true, key: 'lms-plyr' }
-    })
+    let player = null
 
-    playerRef.current = player
-
-    // Event handlers
-    player.on('ready', () => {
-      if (onReady) onReady(player)
-    })
-
-    player.on('play', () => {
-      if (onPlay) onPlay()
-    })
-
-    player.on('pause', () => {
-      if (onPause) onPause()
-    })
-
-    player.on('ended', () => {
-      if (onEnded) onEnded()
-    })
-
-    player.on('timeupdate', () => {
-      if (onTimeUpdate) {
-        onTimeUpdate({
-          currentTime: player.currentTime,
-          duration: player.duration,
-          percentage: player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0
+    // Dynamically import Plyr to handle any load failures
+    const initPlyr = async () => {
+      try {
+        const Plyr = (await import('plyr')).default
+        
+        // Initialize Plyr
+        player = new Plyr(videoRef.current, {
+          controls: [
+            'play-large',
+            'rewind',
+            'play',
+            'fast-forward',
+            'progress',
+            'current-time',
+            'duration',
+            'mute',
+            'volume',
+            'captions',
+            'settings',
+            'pip',
+            'airplay',
+            'fullscreen'
+          ],
+          settings: ['captions', 'quality', 'speed'],
+          speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+          keyboard: { focused: true, global: false },
+          tooltips: { controls: true, seek: true },
+          captions: { active: false, language: 'auto', update: true },
+          fullscreen: { enabled: true, fallback: true, iosNative: true },
+          ratio: '16:9',
+          blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
+          storage: { enabled: true, key: 'lms-plyr' }
         })
-      }
-    })
 
-    player.on('error', () => {
-      setError(true)
-    })
+        playerRef.current = player
+        setPlyrLoaded(true)
+
+        // Event handlers
+        player.on('ready', () => {
+          console.log('Plyr ready')
+          if (onReady) onReady(player)
+        })
+
+        player.on('play', () => {
+          if (onPlay) onPlay()
+        })
+
+        player.on('pause', () => {
+          if (onPause) onPause()
+        })
+
+        player.on('ended', () => {
+          if (onEnded) onEnded()
+        })
+
+        player.on('timeupdate', () => {
+          if (onTimeUpdate) {
+            onTimeUpdate({
+              currentTime: player.currentTime,
+              duration: player.duration,
+              percentage: player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0
+            })
+          }
+        })
+
+        player.on('error', (event) => {
+          console.error('Plyr error:', event)
+          setError(true)
+        })
+
+      } catch (err) {
+        console.error('Failed to load Plyr:', err)
+        // Fall back to native controls
+        setUseFallback(true)
+      }
+    }
+
+    initPlyr()
 
     return () => {
-      player.destroy()
+      if (player) {
+        player.destroy()
+      }
     }
-  }, [url])
+  }, [url, useFallback])
 
   const handleError = () => {
     setError(true)
@@ -130,13 +153,34 @@ export default function VideoPlayer({
     )
   }
 
+  // Use native HTML5 controls as fallback
+  if (useFallback) {
+    return (
+      <div className="video-player-container rounded-lg overflow-hidden bg-black">
+        <video
+          ref={videoRef}
+          className="w-full aspect-video"
+          controls
+          playsInline
+          poster={poster}
+          onError={handleError}
+          onPlay={onPlay}
+          onPause={onPause}
+          onEnded={onEnded}
+        >
+          <source src={url} type={getVideoMimeType(url)} />
+          Your browser does not support the video tag.
+        </video>
+      </div>
+    )
+  }
+
   return (
     <div className="video-player-container rounded-lg overflow-hidden bg-black">
       <video
         ref={videoRef}
         className="plyr-react plyr"
         playsInline
-        crossOrigin="anonymous"
         poster={poster}
         onError={handleError}
       >
@@ -144,19 +188,13 @@ export default function VideoPlayer({
         Your browser does not support the video tag.
       </video>
 
+      {/* Custom Plyr theme colors - uses CSS variables from global overrides */}
       <style>{`
         .video-player-container .plyr {
           --plyr-color-main: #3b82f6;
           --plyr-video-background: #000;
-        }
-        .video-player-container .plyr--full-ui input[type=range] {
-          color: var(--plyr-color-main);
-        }
-        .video-player-container .plyr__control--overlaid {
-          background: var(--plyr-color-main);
-        }
-        .video-player-container .plyr__control--overlaid:hover {
-          background: #2563eb;
+          --plyr-video-control-color: #fff;
+          --plyr-video-control-background-hover: #3b82f6;
         }
       `}</style>
     </div>

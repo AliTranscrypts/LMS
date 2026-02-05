@@ -53,7 +53,8 @@ export default function ContentTypeSelector({ isOpen, onClose, onSelect }) {
             key={type.id}
             onClick={() => {
               onSelect(type.id)
-              onClose()
+              // Don't call onClose() here - onSelect already handles closing the modal
+              // onClose() would reset selectedModuleForContent to null
             }}
             className="flex flex-col items-center p-4 border-2 border-gray-200 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors text-center"
           >
@@ -134,9 +135,9 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
       description: description.trim() || null
     }
 
-    // Add file data for reading/video
+    // Add file data for reading/video (store path, not URL - signed URLs generated on-demand)
     if (requiresFile && fileData) {
-      contentData.fileUrl = fileData.url
+      contentData.fileUrl = fileData.path
       contentData.fileSize = fileData.fileSize
       contentData.fileType = fileData.fileType
     }

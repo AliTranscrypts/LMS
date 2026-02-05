@@ -335,6 +335,7 @@ export function generateSubmissionPath(assignmentId, studentId, fileName) {
 
 /**
  * Upload submission file
+ * Returns path (not URL) - signed URLs are generated on-demand when viewing
  */
 export async function uploadSubmissionFile(file, assignmentId, studentId) {
   const path = generateSubmissionPath(assignmentId, studentId, file.name)
@@ -350,15 +351,10 @@ export async function uploadSubmissionFile(file, assignmentId, studentId) {
     return { data: null, error }
   }
 
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from('course-content')
-    .getPublicUrl(path)
-
+  // Return path only - signed URLs generated on-demand for viewing
   return {
     data: {
       path: data.path,
-      url: urlData.publicUrl,
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type

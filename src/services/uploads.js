@@ -132,7 +132,7 @@ export async function removeIncompleteUpload(filePath) {
  * @param {File} file - The file to upload
  * @param {string} path - Storage path
  * @param {function} onProgress - Progress callback (percentage: number)
- * @returns {Promise<{ data: { path: string, url: string }, error: any }>}
+ * @returns {Promise<{ data: { path: string }, error: any }>}
  */
 export async function uploadFileStandard(file, path, onProgress) {
   try {
@@ -148,20 +148,15 @@ export async function uploadFileStandard(file, path, onProgress) {
       return { data: null, error }
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('course-content')
-      .getPublicUrl(path)
-
     // For standard uploads, we'll simulate progress at 100%
     if (onProgress) {
       onProgress(100)
     }
 
+    // Return the storage path - signed URLs will be generated on-demand when viewing
     return {
       data: {
-        path: data.path,
-        url: urlData.publicUrl
+        path: data.path
       },
       error: null
     }
@@ -228,15 +223,10 @@ export function uploadFileTus(file, path, courseId, callbacks = {}) {
         // Remove incomplete upload record
         await removeIncompleteUpload(path)
 
-        // Get the URL
-        const { data: urlData } = supabase.storage
-          .from('course-content')
-          .getPublicUrl(path)
-
+        // Return the storage path - signed URLs will be generated on-demand when viewing
         if (onSuccess) {
           onSuccess({
-            path,
-            url: urlData.publicUrl
+            path
           })
         }
       }

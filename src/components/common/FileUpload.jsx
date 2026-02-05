@@ -77,11 +77,10 @@ export default function FileUpload({
       onSuccess: (data) => {
         setUploadState('success')
         setProgress(100)
-        setUploadedUrl(data.url)
+        setUploadedUrl(data.path) // Store path for display purposes
         setUploadedFileName(file.name)
         if (onUploadComplete) {
           onUploadComplete({
-            url: data.url,
             path: data.path,
             fileName: file.name,
             fileSize: file.size,

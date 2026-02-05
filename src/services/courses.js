@@ -50,24 +50,33 @@ export async function getCourse(courseId) {
  * Create a new course
  */
 export async function createCourse(teacherId, courseData) {
-  const { data, error } = await supabase
-    .from('courses')
-    .insert({
-      teacher_id: teacherId,
-      name: courseData.name,
-      description: courseData.description,
-      syllabus: courseData.syllabus,
-      category_weights: courseData.categoryWeights || {
-        ku: 25,
-        thinking: 25,
-        application: 25,
-        communication: 25
-      }
-    })
-    .select()
-    .single()
+  try {
+    const { data, error } = await supabase
+      .from('courses')
+      .insert({
+        teacher_id: teacherId,
+        name: courseData.name,
+        description: courseData.description,
+        syllabus: courseData.syllabus,
+        category_weights: courseData.categoryWeights || {
+          ku: 25,
+          thinking: 25,
+          application: 25,
+          communication: 25
+        }
+      })
+      .select()
+      .single()
 
-  return { data, error }
+    if (error) {
+      console.error('Supabase createCourse error:', error)
+    }
+
+    return { data, error }
+  } catch (err) {
+    console.error('Unexpected error in createCourse:', err)
+    return { data: null, error: { message: 'Network error or service unavailable' } }
+  }
 }
 
 /**
