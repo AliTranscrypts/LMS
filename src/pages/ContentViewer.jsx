@@ -9,6 +9,7 @@ import PdfViewer from '../components/content/PdfViewer'
 import VideoPlayer from '../components/content/VideoPlayer'
 import AssignmentViewer from '../components/assignment/AssignmentViewer'
 import { QuizViewer, QuizBuilder } from '../components/quiz'
+import { QuillRenderer } from '../components/common/QuillEditor'
 
 export default function ContentViewer() {
   const { contentId } = useParams()
@@ -194,7 +195,8 @@ export default function ContentViewer() {
     switch (type) {
       case 'reading': return '📄'
       case 'video': return '🎥'
-      case 'assignment': return '📝'
+      case 'text': return '📝'
+      case 'assignment': return '✏️'
       case 'quiz': return '❓'
       default: return '📎'
     }
@@ -348,6 +350,24 @@ export default function ContentViewer() {
             </div>
           )}
 
+          {/* Text Content */}
+          {content?.type === 'text' && content?.text_content && (
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <QuillRenderer content={content.text_content} />
+            </div>
+          )}
+
+          {content?.type === 'text' && !content?.text_content && (
+            <div className="bg-gray-100 rounded-lg p-12 text-center">
+              <div className="text-5xl mb-4">📝</div>
+              <p className="text-gray-600">
+                {isTeacher 
+                  ? 'No content has been added yet.' 
+                  : 'This content is not available yet.'}
+              </p>
+            </div>
+          )}
+
           {content?.type === 'assignment' && isStudent && (
             <AssignmentViewer
               content={content}
@@ -432,8 +452,8 @@ export default function ContentViewer() {
           )}
         </div>
 
-        {/* Mark Complete Button - for students viewing reading/video (not assignments - those complete via submission) */}
-        {isStudent && (content?.type === 'reading' || content?.type === 'video') && (
+        {/* Mark Complete Button - for students viewing reading/video/text (not assignments - those complete via submission) */}
+        {isStudent && (content?.type === 'reading' || content?.type === 'video' || content?.type === 'text') && (
           <div className="bg-white border border-gray-200 rounded-lg p-4 mb-8">
             <div className="flex items-center justify-between">
               <div>

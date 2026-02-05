@@ -198,7 +198,8 @@ function CourseCard({ enrollment, userId }) {
     switch (type) {
       case 'reading': return '📄'
       case 'video': return '🎥'
-      case 'assignment': return '📝'
+      case 'text': return '📝'
+      case 'assignment': return '✏️'
       case 'quiz': return '❓'
       default: return '📎'
     }

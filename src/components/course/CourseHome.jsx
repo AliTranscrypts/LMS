@@ -55,8 +55,10 @@ export default function CourseHome({ course, userId, onNavigateToModules }) {
         return '📄'
       case 'video':
         return '🎥'
-      case 'assignment':
+      case 'text':
         return '📝'
+      case 'assignment':
+        return '✏️'
       case 'quiz':
         return '❓'
       default:

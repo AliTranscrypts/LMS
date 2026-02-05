@@ -553,8 +553,10 @@ function ModuleCard({
         return '📄'
       case 'video':
         return '🎥'
-      case 'assignment':
+      case 'text':
         return '📝'
+      case 'assignment':
+        return '✏️'
       case 'quiz':
         return '❓'
       default:

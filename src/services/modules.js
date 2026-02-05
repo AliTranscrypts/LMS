@@ -111,6 +111,8 @@ export async function addContent(moduleId, contentData) {
       due_date: contentData.dueDate || null,
       total_points: contentData.totalPoints || null,
       quiz_config: contentData.quizConfig || null,
+      // Text content (rich text delta for text type)
+      text_content: contentData.textContent || null,
       // Assignment attachment fields (optional document/video for students)
       attachment_type: contentData.attachmentType || null,
       attachment_url: contentData.attachmentUrl || null,

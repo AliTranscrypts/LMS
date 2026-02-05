@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Modal from '../common/Modal'
 import FileUpload from '../common/FileUpload'
+import QuillEditor from '../common/QuillEditor'
 
 const CONTENT_TYPES = [
   {
@@ -20,9 +21,17 @@ const CONTENT_TYPES = [
     requiresFile: true
   },
   {
+    id: 'text',
+    name: 'Text',
+    icon: '📝',
+    description: 'Rich text content with formatting & links',
+    color: 'bg-teal-100 text-teal-700',
+    requiresFile: false
+  },
+  {
     id: 'assignment',
     name: 'Assignment',
-    icon: '📝',
+    icon: '✏️',
     description: 'Task requiring student submission',
     color: 'bg-green-100 text-green-700',
     requiresFile: false
@@ -102,6 +111,9 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
     communication: 25
   })
 
+  // Text content-specific fields (rich text)
+  const [textContent, setTextContent] = useState(initialData.text_content || null)
+
   const totalWeight = Object.values(categoryWeights).reduce((a, b) => a + b, 0)
   const isValidWeight = totalWeight === 100
 
@@ -140,6 +152,16 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
       return
     }
 
+    // Validate text content has actual content
+    if (type === 'text') {
+      const hasTextContent = textContent && textContent.ops && textContent.ops.length > 0 &&
+        !(textContent.ops.length === 1 && textContent.ops[0].insert === '\n')
+      if (!hasTextContent) {
+        setError('Please enter some text content')
+        return
+      }
+    }
+
     if ((type === 'assignment' || type === 'quiz') && !isValidWeight) {
       setError('Category weights must sum to 100%')
       return
@@ -164,6 +186,11 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
       contentData.fileUrl = fileData.path
       contentData.fileSize = fileData.fileSize
       contentData.fileType = fileData.fileType
+    }
+
+    // Add text content for text type
+    if (type === 'text' && textContent) {
+      contentData.textContent = textContent
     }
 
     // Add assignment-specific fields
@@ -230,18 +257,36 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
         />
       </div>
 
-      {/* Description */}
-      <div>
-        <label htmlFor="contentDescription" className="label">Description</label>
-        <textarea
-          id="contentDescription"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="input"
-          rows={2}
-          placeholder="Brief description or instructions..."
-        />
-      </div>
+      {/* Description - only for non-text types */}
+      {type !== 'text' && (
+        <div>
+          <label htmlFor="contentDescription" className="label">Description</label>
+          <textarea
+            id="contentDescription"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="input"
+            rows={2}
+            placeholder="Brief description or instructions..."
+          />
+        </div>
+      )}
+
+      {/* Text content editor - for text type only */}
+      {type === 'text' && (
+        <div>
+          <label className="label">Content *</label>
+          <p className="text-xs text-gray-500 mb-2">
+            Add your content below. You can include headings, lists, links, images, videos, and more.
+          </p>
+          <QuillEditor
+            value={textContent}
+            onChange={setTextContent}
+            placeholder="Write your content here... You can add links, formatting, images, and more."
+            className="border border-gray-300 rounded-lg overflow-hidden"
+          />
+        </div>
+      )}
 
       {/* Assignment/Quiz specific fields */}
       {(type === 'assignment' || type === 'quiz') && (
@@ -426,7 +471,9 @@ export function ContentForm({ type, courseId, onSubmit, onCancel, initialData = 
             loading || 
             ((type === 'assignment' || type === 'quiz') && !isValidWeight) || 
             (requiresFile && !uploadComplete) ||
-            (type === 'assignment' && attachmentType !== 'none' && !attachmentUploadComplete)
+            (type === 'assignment' && attachmentType !== 'none' && !attachmentUploadComplete) ||
+            (type === 'text' && (!textContent || !textContent.ops || textContent.ops.length === 0 || 
+              (textContent.ops.length === 1 && textContent.ops[0].insert === '\n')))
           }
           className="btn btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
         >
