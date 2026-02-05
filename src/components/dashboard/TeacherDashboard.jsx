@@ -55,6 +55,21 @@ export default function TeacherDashboard() {
 
   const handleCreateCourse = async (courseData) => {
     try {
+      // Debug logging for production issues
+      console.log('handleCreateCourse called')
+      console.log('User ID:', user?.id)
+      console.log('Profile role:', profile?.role)
+      
+      if (!user?.id) {
+        console.error('No user ID available')
+        return { error: 'You must be logged in to create a course. Please refresh and try again.' }
+      }
+      
+      if (profile?.role !== 'teacher') {
+        console.error('User is not a teacher:', profile?.role)
+        return { error: 'Only teachers can create courses. Your role: ' + (profile?.role || 'unknown') }
+      }
+      
       const { data, error } = await createCourse(user.id, courseData)
       
       if (error) {
@@ -74,7 +89,7 @@ export default function TeacherDashboard() {
       return { error: null }
     } catch (err) {
       console.error('Unexpected error creating course:', err)
-      return { error: 'An unexpected error occurred. Please try again.' }
+      return { error: err.message || 'An unexpected error occurred. Please try again.' }
     }
   }
 
