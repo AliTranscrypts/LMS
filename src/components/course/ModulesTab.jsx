@@ -4,7 +4,6 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { getCourseModules } from '../../services/courses'
 import { createModule, updateModule, deleteModule, reorderModules, addContent, deleteContent, reorderContent } from '../../services/modules'
 import { getStudentCourseProgress } from '../../services/progress'
-import { ensureValidSession } from '../../services/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import EmptyState from '../common/EmptyState'
 import Modal from '../common/Modal'
@@ -96,18 +95,18 @@ export default function ModulesTab({ course, isTeacher, onUpdate }) {
     setActionError(null)
     setIsCreatingModule(true)
 
-    try {
-      // Ensure we have a valid session before making the API call
-      const { valid, error: sessionError } = await ensureValidSession()
-      if (!valid) {
-        console.error('Session validation failed:', sessionError)
-        setActionError('Your session has expired. Please refresh the page and try again.')
-        setIsCreatingModule(false)
-        return
-      }
+    // Add timeout to prevent indefinite hanging
+    const TIMEOUT_MS = 15000 // 15 seconds
+    const timeoutId = setTimeout(() => {
+      setIsCreatingModule(false)
+      setActionError('Request timed out. Please refresh the page and try again.')
+    }, TIMEOUT_MS)
 
+    try {
       const orderIndex = modules.length
       const { data, error } = await createModule(course.id, newModuleName.trim(), orderIndex)
+      
+      clearTimeout(timeoutId)
       
       if (error) {
         console.error('Failed to create module:', error)
@@ -119,13 +118,16 @@ export default function ModulesTab({ course, isTeacher, onUpdate }) {
         } else {
           setActionError(error.message || 'Failed to create module. Please try again.')
         }
-      } else {
+      } else if (data) {
         setModules(prev => [...prev, { ...data, content: [] }])
         setExpandedModules(prev => ({ ...prev, [data.id]: true }))
         setIsAddingModule(false)
         setNewModuleName('')
+      } else {
+        setActionError('No response received. Please try again.')
       }
     } catch (err) {
+      clearTimeout(timeoutId)
       console.error('Unexpected error creating module:', err)
       setActionError('An unexpected error occurred. Please try again.')
     } finally {

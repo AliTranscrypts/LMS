@@ -27,8 +27,9 @@ export const supabase = createClient(
   }
 )
 
-// Helper to check if session is valid and refresh if needed
-// This is crucial for preventing stale session issues that cause silent API failures
+// Helper to check if session is valid
+// NOTE: We avoid calling refreshSession() here to prevent Supabase Web Locks deadlock.
+// The autoRefreshToken setting handles token refresh automatically.
 export async function ensureValidSession() {
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
@@ -43,35 +44,16 @@ export async function ensureValidSession() {
       return { valid: false, error: { message: 'No active session' } }
     }
     
-    // Check if token is expired or about to expire (within 5 minutes)
-    // Using a larger buffer to prevent edge cases where the token expires mid-request
+    // Check if token is expired
     const expiresAt = session.expires_at
     const now = Math.floor(Date.now() / 1000)
-    const bufferSeconds = 300 // 5 minutes buffer
     
-    if (expiresAt && expiresAt - now < bufferSeconds) {
-      console.log('Session expiring soon, refreshing...')
-      const { data, error: refreshError } = await supabase.auth.refreshSession()
-      if (refreshError) {
-        console.error('Session refresh failed:', refreshError)
-        return { valid: false, error: refreshError }
-      }
-      console.log('Session refreshed successfully')
-      return { valid: true, session: data.session }
+    if (expiresAt && expiresAt <= now) {
+      console.warn('Session has expired')
+      return { valid: false, error: { message: 'Session expired' } }
     }
     
-    // Even if the token looks valid, proactively verify the session is still good
-    // by checking if we can get a fresh session from the auth service
-    // This helps catch cases where localStorage session is stale
-    const { data: freshData, error: freshError } = await supabase.auth.refreshSession()
-    if (freshError) {
-      // If refresh fails but we have a session that hasn't expired, still try to use it
-      // The refresh might fail for various reasons that don't affect the current session
-      console.warn('Proactive session refresh failed, using existing session:', freshError)
-      return { valid: true, session }
-    }
-    
-    return { valid: true, session: freshData.session || session }
+    return { valid: true, session }
   } catch (err) {
     console.error('Unexpected error in ensureValidSession:', err)
     return { valid: false, error: { message: err.message || 'Session validation failed' } }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase } from '../services/supabase'
 
 const AuthContext = createContext({})
@@ -15,27 +15,54 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  
+  // Track user ID changes to trigger profile fetch outside of onAuthStateChange
+  // This prevents the Supabase Web Locks deadlock issue
+  const [pendingUserId, setPendingUserId] = useState(null)
+  const initialLoadDone = useRef(false)
+
+  // Fetch profile when pendingUserId changes (outside of onAuthStateChange callback)
+  useEffect(() => {
+    if (pendingUserId) {
+      fetchProfile(pendingUserId)
+      setPendingUserId(null)
+    }
+  }, [pendingUserId])
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
+        // Fetch profile directly on initial load (safe because we're not in onAuthStateChange)
         fetchProfile(session.user.id)
       } else {
         setLoading(false)
       }
+      initialLoadDone.current = true
     })
 
     // Listen for auth changes
+    // IMPORTANT: Do NOT make async Supabase calls directly in this callback!
+    // Doing so causes a deadlock due to Supabase's Web Locks implementation.
+    // Instead, we set pendingUserId and let the useEffect above handle the profile fetch.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
+        console.log('[Auth] State change:', event)
         setUser(session?.user ?? null)
+        
         if (session?.user) {
-          await fetchProfile(session.user.id)
+          // Only trigger profile re-fetch on SIGNED_IN or if profile doesn't match user
+          // TOKEN_REFRESHED events don't need profile re-fetch
+          if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            // Queue profile fetch outside this callback to prevent deadlock
+            setPendingUserId(session.user.id)
+          }
         } else {
           setProfile(null)
-          setLoading(false)
+          if (initialLoadDone.current) {
+            setLoading(false)
+          }
         }
       }
     )
